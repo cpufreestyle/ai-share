@@ -6,11 +6,16 @@ const { COLLECTIONS, list, get, create, update, remove, rewrite, exportAll, rest
 const { exportProfile, applyExport, detectClients, scanClientMcp, scanClientSkills, scanClientPrompts, expand, syncRepo } = require('./lib/export');
 const sync = require('./lib/sync');
 const vault = require('./lib/crypto');
+// 应用根目录：server.js 与 public/ 同级（源码模式与 exe 解压模式均如此）
+const APP_ROOT = process.pkg
+  ? path.dirname(process.execPath)
+  : __dirname;
+
 // 加密盐文件放在资源根 data/ 下（与 store.js 的 DATA_DIR 同根），而非 app 内部
-const SALT_FILE = path.join(__dirname, '..', '..', 'data', '.salt');
+const SALT_FILE = path.join(APP_ROOT, 'data', '.salt');
 
 const PORT = process.env.PORT || 4737;
-const PUBLIC = path.join(__dirname, 'public');
+const PUBLIC = path.join(APP_ROOT, 'public');
 
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
@@ -259,6 +264,7 @@ const server = http.createServer(async (req, res) => {
 
     if (await handleCrud(req, res, p)) return;
 
+    console.error('[404] not found:', req.method, p);
     return send(res, 404, { error: 'not found' });
   } catch (e) {
     return send(res, 500, { error: e.message });
@@ -270,4 +276,13 @@ server.listen(PORT, () => {
   // 重启后按已保存的配置恢复定时同步，避免自动同步静默失效
   const s = sync.startAuto();
   if (s.running) console.log(`定时同步已启用，每 ${s.intervalMinutes} 分钟一次`);
+
+  // 本机自动打开浏览器（设置 AI_SHARE_NO_OPEN=1 可关闭）
+  if (!process.env.AI_SHARE_NO_OPEN) {
+    const { spawn } = require('child_process');
+    const url = `http://localhost:${PORT}/`;
+    const op = process.platform === 'win32' ? 'cmd' : 'open';
+    const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
+    try { spawn(op, args, { detached: true, stdio: 'ignore' }).unref(); } catch (_) {}
+  }
 });

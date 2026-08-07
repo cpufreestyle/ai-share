@@ -11,9 +11,12 @@ const { mergeLWW, SYNC_COLLECTIONS } = require('./lib/sync');
 
 const PORT = process.env.SYNC_PORT || 4738;
 const TOKEN = process.env.SYNC_TOKEN || '';
+const APP_ROOT = process.pkg
+  ? path.dirname(process.execPath)
+  : __dirname;
 const DATA_DIR = process.env.SYNC_DATA_DIR
   ? path.resolve(process.env.SYNC_DATA_DIR)
-  : path.join(__dirname, '..', '..', 'sync-data');
+  : path.join(APP_ROOT, 'sync-data');
 
 function ensureDir() { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); }
 function fileFor(col) { return path.join(DATA_DIR, col + '.json'); }
