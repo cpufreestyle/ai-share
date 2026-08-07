@@ -47,8 +47,15 @@ function openVaultSet() {
 
 function toast(msg) {
   const t = document.getElementById('toast');
-  t.textContent = msg; t.classList.remove('hidden');
-  clearTimeout(t._t); t._t = setTimeout(() => t.classList.add('hidden'), 2200);
+  if (!t) return;
+  // 先写入内容，待下一帧布局稳定后再显示，规避部分 WebView 内核
+  // 在元素由 display:none 切到显示瞬间读取几何信息导致的崩溃。
+  t.textContent = msg;
+  if (t._raf) cancelAnimationFrame(t._raf);
+  t._raf = requestAnimationFrame(() => {
+    t.classList.remove('hidden');
+    clearTimeout(t._t); t._t = setTimeout(() => t.classList.add('hidden'), 2200);
+  });
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m])); }
 function $(sel) { return document.querySelector(sel); }
@@ -709,12 +716,33 @@ $('#collectBtn').onclick = async () => {
 // 便于定位偶发的运行时报错：把文件名/行号/调用栈打到控制台，
 // 避免只看到一句无上下文的错误信息。
 window.addEventListener('error', (e) => {
-  console.error('[ai-share] 未捕获错误:', e.message, 'at', e.filename + ':' + e.lineno + ':' + e.colno, e.error && e.error.stack);
+  const stack = (e.error && e.error.stack) || '';
+  console.error('[ai-share] 未捕获错误:', e.message,
+    'at', e.filename + ':' + e.lineno + ':' + e.colno,
+    '| readyState=', document.readyState,
+    '| target=', (e.target && e.target.tagName) || 'window');
+  if (stack) console.error('[ai-share] stack:\n' + stack);
+  // 若是 WebView 渲染层读取几何信息的崩溃，额外记录当前活动页与可见 modal/toast 状态
+  if (/getBoundingClientRect|layout|geometry/i.test(e.message)) {
+    console.error('[ai-share] 疑似 WebView 布局崩溃，上下文:',
+      'activePage=', document.querySelector('.nav-item.active') && document.querySelector('.nav-item.active').dataset.k,
+      'modalHidden=', document.getElementById('modal').classList.contains('hidden'),
+      'toastHidden=', document.getElementById('toast').classList.contains('hidden'));
+  }
 });
 window.addEventListener('unhandledrejection', (e) => {
   console.error('[ai-share] 未处理的 Promise 拒绝:', e.reason);
 });
 
-buildNav();
-renderVault();
-navTo('profiles');
+// 防御性初始化：DOM 就绪后再构建界面，规避部分 WebView 内核
+// 在脚本执行时机差异下出现的布局/元素读取竞态。
+function boot() {
+  buildNav();
+  renderVault();
+  navTo('profiles');
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', boot, { once: true });
+} else {
+  boot();
+}
