@@ -1,0 +1,15 @@
+{
+  "name": "ai-share",
+  "version": "0.2.0",
+  "private": true,
+  "description": "零依赖本地 Web 应用，集中管理并跨客户端共享 AI 资源（API / 提示词 / MCP / Skill）",
+  "scripts": {
+    "start": "node server.js",
+    "sync-server": "node sync-server.js",
+    "test": "node test/collect.test.js && node test/sync.test.js",
+    "lint": "node --check server.js && node --check sync-server.js && node --check lib/store.js && node --check lib/export.js && node --check lib/crypto.js && node --check lib/sync.js && node --check public/app.js"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}
