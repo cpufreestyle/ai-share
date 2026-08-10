@@ -3,6 +3,23 @@
 本项目的所有重要变更都会记录在此文件中。
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.3.0] - 2026-08-10
+
+### 新增
+
+- **跨平台可执行文件**：Release 现提供 Windows x64、Linux x64、macOS Intel、macOS Apple Silicon 四个平台的单文件可执行程序，无需安装 Node.js 即可运行。
+- **跨平台启动脚本**：新增 `start.sh` / `stop.sh`（Linux / macOS），与既有 `start.bat` / `stop.bat` 行为对齐，支持自动释放被占端口；`./start.sh -d` 可后台启动并写日志到 `server.log`。
+- **多平台自动发布**：`.github/workflows/release.yml` 改为四平台原生 runner 矩阵构建，用 `@yao-pkg/pkg` 打包，每个产物均执行启动冒烟测试后才上传 Release；保留 tag 与 `package.json` 版本一致性校验及 CHANGELOG 发布说明提取，并支持手动触发。
+
+### 修复
+
+- **Linux 下无法自动打开浏览器**：此前非 Windows 平台一律调用 macOS 专有的 `open` 命令，在 Linux 上静默失败；现按平台分发至 `xdg-open`。
+
+### 变更
+
+- 打包工具由已停止维护的 `pkg` 切换为活跃维护的 `@yao-pkg/pkg`，目标运行时由 Node 18 升至 Node 20。
+- 新增 `.gitattributes`，固定 `*.sh` 为 LF、`*.bat` / `*.ps1` 为 CRLF，避免换行符转换破坏脚本。
+
 ## [0.2.0] - 2026-08-06
 
 ### 新增

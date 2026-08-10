@@ -1,22 +1,27 @@
-name: Release
+name: Build & Release
 
-# 推送 v* 形式的 tag 时触发，例如 v0.2.0
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要发布的 tag（如 v0.3.1）'
+        required: true
 
 permissions:
-  contents: write # 创建 Release 需要写权限
+  contents: write
 
 jobs:
-  release:
+  test:
+    name: Lint & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '20'
 
       # 零依赖项目：无需 npm install
       - name: Lint
@@ -25,9 +30,11 @@ jobs:
         run: npm test
 
       # 校验 tag 与 package.json 版本号一致，避免发错版本
+      # workflow_dispatch 手动触发时用输入的 tag
       - name: Verify version matches tag
         run: |
-          TAG="${GITHUB_REF_NAME#v}"
+          RAW="${{ github.event.inputs.tag || github.ref_name }}"
+          TAG="${RAW#v}"
           PKG=$(node -p "require('./package.json').version")
           echo "tag=$TAG package.json=$PKG"
           if [ "$TAG" != "$PKG" ]; then
@@ -35,11 +42,118 @@ jobs:
             exit 1
           fi
 
+  build:
+    name: Build (${{ matrix.label }})
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: windows-x64
+            target: node20-win-x64
+            artifact: ai-share-windows-x64.exe
+          - os: ubuntu-latest
+            label: linux-x64
+            target: node20-linux-x64
+            artifact: ai-share-linux-x64
+          - os: macos-13          # Intel runner
+            label: macos-x64
+            target: node20-macos-x64
+            artifact: ai-share-macos-x64
+          - os: macos-latest      # Apple Silicon runner
+            label: macos-arm64
+            target: node20-macos-arm64
+            artifact: ai-share-macos-arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pkg
+        run: npm install --no-save --no-audit --no-fund @yao-pkg/pkg@^6.6.0
+
+      - name: Build binary
+        shell: bash
+        run: |
+          npx pkg server.js \
+            --targets ${{ matrix.target }} \
+            --output "dist/${{ matrix.artifact }}"
+
+      # pkg 产物不带执行位，Unix 上需手动补
+      - name: Make executable (unix)
+        if: runner.os != 'Windows'
+        run: chmod +x "dist/${{ matrix.artifact }}"
+
+      # 冒烟测试：启动服务并确认首页可访问，避免发布坏包
+      - name: Smoke test (unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          AI_SHARE_NO_OPEN: '1'
+        run: |
+          "./dist/${{ matrix.artifact }}" &
+          PID=$!
+          for i in $(seq 1 20); do
+            if curl -fsS http://localhost:4737/ >/dev/null 2>&1; then
+              echo "OK: server responded"
+              kill $PID 2>/dev/null || true
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "FAIL: server did not respond in 20s" >&2
+          kill $PID 2>/dev/null || true
+          exit 1
+
+      - name: Smoke test (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          AI_SHARE_NO_OPEN: '1'
+        run: |
+          $p = Start-Process -FilePath "dist/${{ matrix.artifact }}" -PassThru -WindowStyle Hidden
+          $ok = $false
+          for ($i = 0; $i -lt 20; $i++) {
+            try {
+              Invoke-WebRequest -Uri 'http://localhost:4737/' -TimeoutSec 3 -UseBasicParsing | Out-Null
+              $ok = $true; break
+            } catch { Start-Sleep -Seconds 1 }
+          }
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          if (-not $ok) { Write-Error 'FAIL: server did not respond in 20s'; exit 1 }
+          Write-Output 'OK: server responded'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}
+          retention-days: 7
+
+  release:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -lh artifacts/
+
       # 从 CHANGELOG 中提取当前版本的段落作为发布说明
       - name: Extract release notes
-        id: notes
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          RAW="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${RAW#v}"
           awk -v v="$VERSION" '
             $0 ~ "^## \\[" v "\\]" { flag=1; next }
             flag && /^## \[/ { exit }
@@ -53,5 +167,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }}
+          name: ${{ github.event.inputs.tag || github.ref_name }}
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           body_path: RELEASE_NOTES.md
+          files: artifacts/*
+          fail_on_unmatched_files: true

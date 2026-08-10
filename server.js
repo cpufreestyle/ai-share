@@ -281,8 +281,10 @@ server.listen(PORT, () => {
   if (!process.env.AI_SHARE_NO_OPEN) {
     const { spawn } = require('child_process');
     const url = `http://localhost:${PORT}/`;
-    const op = process.platform === 'win32' ? 'cmd' : 'open';
-    const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
+    let op, args;
+    if (process.platform === 'win32') { op = 'cmd'; args = ['/c', 'start', '', url]; }
+    else if (process.platform === 'darwin') { op = 'open'; args = [url]; }
+    else { op = 'xdg-open'; args = [url]; } // Linux / BSD
     try { spawn(op, args, { detached: true, stdio: 'ignore' }).unref(); } catch (_) {}
   }
 });

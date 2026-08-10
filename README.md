@@ -18,16 +18,47 @@
 
 ## 快速开始
 
-需要 Node.js（无需 `npm install`）：
+### 方式一：下载可执行文件（无需安装 Node）
+
+前往 [Releases](https://github.com/cpufreestyle/ai-share/releases) 下载对应平台的文件，双击或在终端运行：
+
+| 平台 | 文件 |
+| --- | --- |
+| Windows x64 | `ai-share-windows-x64.exe` |
+| Linux x64 | `ai-share-linux-x64` |
+| macOS Intel | `ai-share-macos-x64` |
+| macOS Apple Silicon | `ai-share-macos-arm64` |
+
+Linux / macOS 首次运行需赋予执行权限：
 
 ```bash
-cd "ai share"
+chmod +x ai-share-linux-x64
+./ai-share-linux-x64
+```
+
+> macOS 提示「无法验证开发者」时：右键点按文件选「打开」，或执行
+> `xattr -d com.apple.quarantine ai-share-macos-arm64`（产物未做签名公证）。
+
+### 方式二：用源码运行（需 Node.js ≥ 16，无需 `npm install`）
+
+```bash
+# Windows
+start.bat
+
+# Linux / macOS
+./start.sh          # 前台运行
+./start.sh -d       # 后台运行，日志写入 server.log
+
+# 或直接调用
 node server.js
 ```
 
-打开浏览器访问 http://localhost:4737
+停止服务：Windows 用 `stop.bat`，Linux / macOS 用 `./stop.sh`。
+
+打开浏览器访问 http://localhost:4737（启动脚本会自动打开）
 
 > 可用环境变量改端口：`PORT=8080 node server.js`
+> 设置 `AI_SHARE_NO_OPEN=1` 可禁止自动打开浏览器。
 
 ## 开发与测试
 
@@ -41,6 +72,7 @@ npm test         # 运行隔离单测（test/collect.test.js）
 
 - **单测隔离**：`npm test` 通过环境变量 `AI_SHARE_DATA_DIR` 把数据目录指向临时目录，**不会触碰真实 `data/`**，测试结束自动清理。覆盖扫描（Skill / 提示词 / MCP）、内容指纹去重、大文件跳过、客户端登记与「一键采集」端到端等场景。
 - **CI**：`.github/workflows/ci.yml` 在 `push` / `pull_request` 时自动运行 `npm run lint` 与 `npm test`（Ubuntu + Node 20）。
+- **发布**：`.github/workflows/release.yml` 在推送 `v*` tag 时，于 Windows / Linux / macOS(Intel + ARM) 四个原生 runner 上用 [`@yao-pkg/pkg`](https://github.com/yao-pkg/pkg) 分别打包，逐个做启动冒烟测试后自动上传到 GitHub Release。也可在 Actions 页手动触发（`workflow_dispatch`）。
 - **忽略项**：`data/`（含 `proxy.json`、`sync.json`、`.repos-cache/`）、`sync-data/`、`node_modules/`、`server.log`、`server.err`、`*.key` 已在 `.gitignore` 中，请勿提交运行时数据与密钥。
 
 ## 使用流程
