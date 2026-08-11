@@ -112,11 +112,13 @@ jobs:
           PID=$!
 
           ok=0
-          for i in $(seq 1 30); do
+          # pkg 打的 exe 在 CI runner 上首次解包 + Node 启动可能耗时较久，
+          # 等待窗口放宽到 120s，避免误判（实测冷启动接近 30s）
+          for i in $(seq 1 120); do
             # server.js 已显式绑定 0.0.0.0，IPv4 回环必然可达；
             # 同时保留 IPv6 探测以兼容纯 IPv6 环境
-            if curl -fsS --max-time 3 http://127.0.0.1:4737/ >/dev/null 2>&1 \
-               || curl -fsS --max-time 3 http://[::1]:4737/ >/dev/null 2>&1; then
+            if curl -fsS --max-time 2 http://127.0.0.1:4737/ >/dev/null 2>&1 \
+               || curl -fsS --max-time 2 http://[::1]:4737/ >/dev/null 2>&1; then
               ok=1
               break
             fi
@@ -155,10 +157,10 @@ jobs:
               -RedirectStandardOutput smoke.log -RedirectStandardError smoke.err `
               -PassThru -WindowStyle Hidden
           $ok = $false
-          for ($i = 0; $i -lt 30; $i++) {
+          for ($i = 0; $i -lt 120; $i++) {
             if ($p.HasExited) { Write-Output '进程提前退出'; break }
             try {
-              Invoke-WebRequest -Uri 'http://127.0.0.1:4737/' -TimeoutSec 3 -UseBasicParsing | Out-Null
+              Invoke-WebRequest -Uri 'http://127.0.0.1:4737/' -TimeoutSec 2 -UseBasicParsing | Out-Null
               $ok = $true; break
             } catch { Start-Sleep -Seconds 1 }
           }
