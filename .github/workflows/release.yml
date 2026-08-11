@@ -92,23 +92,40 @@ jobs:
       # 冒烟测试：启动服务并确认首页可访问，避免发布坏包
       - name: Smoke test (unix)
         if: runner.os != 'Windows'
-        shell: bash
+        # set -e 会让循环里首次 curl 失败即中断，故显式关闭
+        shell: bash --noprofile --norc {0}
         env:
           AI_SHARE_NO_OPEN: '1'
         run: |
-          "./dist/${{ matrix.artifact }}" &
+          set +e
+          "./dist/${{ matrix.artifact }}" > smoke.log 2>&1 &
           PID=$!
-          for i in $(seq 1 20); do
-            if curl -fsS http://localhost:4737/ >/dev/null 2>&1; then
-              echo "OK: server responded"
-              kill $PID 2>/dev/null || true
-              exit 0
+
+          ok=0
+          for i in $(seq 1 30); do
+            # 同时探测 IPv4 与 IPv6 回环，避免解析差异导致误判
+            if curl -fsS --max-time 3 http://127.0.0.1:4737/ >/dev/null 2>&1 \
+               || curl -fsS --max-time 3 http://[::1]:4737/ >/dev/null 2>&1; then
+              ok=1
+              break
+            fi
+            # 进程已退出则无需继续等待
+            if ! kill -0 $PID 2>/dev/null; then
+              echo "进程提前退出" >&2
+              break
             fi
             sleep 1
           done
-          echo "FAIL: server did not respond in 20s" >&2
-          kill $PID 2>/dev/null || true
-          exit 1
+
+          echo "--- server output ---"
+          cat smoke.log || true
+
+          kill $PID 2>/dev/null
+          if [ "$ok" != "1" ]; then
+            echo "FAIL: server did not respond in 30s" >&2
+            exit 1
+          fi
+          echo "OK: server responded"
 
       - name: Smoke test (windows)
         if: runner.os == 'Windows'
@@ -116,16 +133,23 @@ jobs:
         env:
           AI_SHARE_NO_OPEN: '1'
         run: |
-          $p = Start-Process -FilePath "dist/${{ matrix.artifact }}" -PassThru -WindowStyle Hidden
+          $ProgressPreference = 'SilentlyContinue'
+          $p = Start-Process -FilePath "dist/${{ matrix.artifact }}" `
+              -RedirectStandardOutput smoke.log -RedirectStandardError smoke.err `
+              -PassThru -WindowStyle Hidden
           $ok = $false
-          for ($i = 0; $i -lt 20; $i++) {
+          for ($i = 0; $i -lt 30; $i++) {
+            if ($p.HasExited) { Write-Output '进程提前退出'; break }
             try {
-              Invoke-WebRequest -Uri 'http://localhost:4737/' -TimeoutSec 3 -UseBasicParsing | Out-Null
+              Invoke-WebRequest -Uri 'http://127.0.0.1:4737/' -TimeoutSec 3 -UseBasicParsing | Out-Null
               $ok = $true; break
             } catch { Start-Sleep -Seconds 1 }
           }
+          Write-Output '--- server output ---'
+          if (Test-Path smoke.log) { Get-Content smoke.log }
+          if (Test-Path smoke.err) { Get-Content smoke.err }
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
-          if (-not $ok) { Write-Error 'FAIL: server did not respond in 20s'; exit 1 }
+          if (-not $ok) { Write-Error 'FAIL: server did not respond in 30s'; exit 1 }
           Write-Output 'OK: server responded'
 
       - uses: actions/upload-artifact@v4
