@@ -271,8 +271,8 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`AI Share 已启动: http://localhost:${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`AI Share 已启动: http://localhost:${PORT}  (监听 0.0.0.0:${PORT})`);
   // 重启后按已保存的配置恢复定时同步，避免自动同步静默失效
   const s = sync.startAuto();
   if (s.running) console.log(`定时同步已启用，每 ${s.intervalMinutes} 分钟一次`);

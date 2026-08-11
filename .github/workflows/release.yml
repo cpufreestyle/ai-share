@@ -75,7 +75,7 @@ jobs:
           node-version: '20'
 
       - name: Install pkg
-        run: npm install --no-save --no-audit --no-fund @yao-pkg/pkg@^6.6.0
+        run: npm install --no-save --no-audit --no-fund @yao-pkg/pkg@6.6.0
 
       - name: Build binary
         shell: bash
@@ -92,40 +92,77 @@ jobs:
       # 冒烟测试：启动服务并确认首页可访问，避免发布坏包
       - name: Smoke test (unix)
         if: runner.os != 'Windows'
-        shell: bash
+        # set -e 会让循环里首次 curl 失败即中断，故显式关闭
+        shell: bash --noprofile --norc {0}
         env:
           AI_SHARE_NO_OPEN: '1'
+          # 显式固定端口：runner 环境可能已存在 PORT 变量，
+          # 而 server.js 用的是 process.env.PORT || 4737
+          PORT: '4737'
         run: |
-          "./dist/${{ matrix.artifact }}" &
+          set +e
+          echo "PORT=$PORT"
+          "./dist/${{ matrix.artifact }}" > smoke.log 2>&1 &
           PID=$!
-          for i in $(seq 1 20); do
-            if curl -fsS http://localhost:4737/ >/dev/null 2>&1; then
-              echo "OK: server responded"
-              kill $PID 2>/dev/null || true
-              exit 0
+
+          ok=0
+          for i in $(seq 1 30); do
+            # server.js 已显式绑定 0.0.0.0，IPv4 回环必然可达；
+            # 同时保留 IPv6 探测以兼容纯 IPv6 环境
+            if curl -fsS --max-time 3 http://127.0.0.1:4737/ >/dev/null 2>&1 \
+               || curl -fsS --max-time 3 http://[::1]:4737/ >/dev/null 2>&1; then
+              ok=1
+              break
+            fi
+            # 进程已退出则无需继续等待
+            if ! kill -0 $PID 2>/dev/null; then
+              echo "进程提前退出" >&2
+              break
             fi
             sleep 1
           done
-          echo "FAIL: server did not respond in 20s" >&2
-          kill $PID 2>/dev/null || true
-          exit 1
+
+          echo "--- server output ---"
+          cat smoke.log || true
+          echo "--- listening sockets ---"
+          (command -v ss >/dev/null && ss -lntp 2>/dev/null | grep -E '4737|LISTEN' ) || true
+
+          kill $PID 2>/dev/null
+          if [ "$ok" != "1" ]; then
+            echo "--- curl -v diagnosis ---"
+            curl -v --max-time 5 http://127.0.0.1:4737/ 2>&1 || true
+            echo "FAIL: server did not respond in 30s" >&2
+            exit 1
+          fi
+          echo "OK: server responded"
 
       - name: Smoke test (windows)
         if: runner.os == 'Windows'
         shell: pwsh
         env:
           AI_SHARE_NO_OPEN: '1'
+          PORT: '4737'
         run: |
-          $p = Start-Process -FilePath "dist/${{ matrix.artifact }}" -PassThru -WindowStyle Hidden
+          $ProgressPreference = 'SilentlyContinue'
+          Write-Output "PORT=$env:PORT"
+          $p = Start-Process -FilePath "dist/${{ matrix.artifact }}" `
+              -RedirectStandardOutput smoke.log -RedirectStandardError smoke.err `
+              -PassThru -WindowStyle Hidden
           $ok = $false
-          for ($i = 0; $i -lt 20; $i++) {
+          for ($i = 0; $i -lt 30; $i++) {
+            if ($p.HasExited) { Write-Output '进程提前退出'; break }
             try {
-              Invoke-WebRequest -Uri 'http://localhost:4737/' -TimeoutSec 3 -UseBasicParsing | Out-Null
+              Invoke-WebRequest -Uri 'http://127.0.0.1:4737/' -TimeoutSec 3 -UseBasicParsing | Out-Null
               $ok = $true; break
             } catch { Start-Sleep -Seconds 1 }
           }
+          Write-Output '--- server output ---'
+          if (Test-Path smoke.log) { Get-Content smoke.log }
+          if (Test-Path smoke.err) { Get-Content smoke.err }
+          Write-Output '--- listening ports ---'
+          try { Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -eq 4737 } | Format-Table -AutoSize | Out-String | Write-Output } catch { Write-Output 'Get-NetTCPConnection 不可用' }
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
-          if (-not $ok) { Write-Error 'FAIL: server did not respond in 20s'; exit 1 }
+          if (-not $ok) { Write-Error 'FAIL: server did not respond in 30s'; exit 1 }
           Write-Output 'OK: server responded'
 
       - uses: actions/upload-artifact@v4
