@@ -96,8 +96,12 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           AI_SHARE_NO_OPEN: '1'
+          # 显式固定端口：runner 环境可能已存在 PORT 变量，
+          # 而 server.js 用的是 process.env.PORT || 4737
+          PORT: '4737'
         run: |
           set +e
+          echo "PORT=$PORT"
           "./dist/${{ matrix.artifact }}" > smoke.log 2>&1 &
           PID=$!
 
@@ -132,8 +136,10 @@ jobs:
         shell: pwsh
         env:
           AI_SHARE_NO_OPEN: '1'
+          PORT: '4737'
         run: |
           $ProgressPreference = 'SilentlyContinue'
+          Write-Output "PORT=$env:PORT"
           $p = Start-Process -FilePath "dist/${{ matrix.artifact }}" `
               -RedirectStandardOutput smoke.log -RedirectStandardError smoke.err `
               -PassThru -WindowStyle Hidden
