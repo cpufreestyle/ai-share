@@ -1,17 +1,17 @@
 {
   "name": "ai-share",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "private": true,
   "description": "零依赖本地 Web 应用，集中管理并跨客户端共享 AI 资源（API / 提示词 / MCP / Skill）",
   "scripts": {
     "start": "node server.js",
     "open": "node server.js",
     "sync-server": "node sync-server.js",
-    "build": "pkg server.js --targets node20-win-x64 --output dist/ai-share.exe",
-    "build-sync": "pkg sync-server.js --targets node20-win-x64 --output dist/ai-share-sync.exe",
-    "build:linux": "pkg server.js --targets node20-linux-x64 --output dist/ai-share-linux-x64",
-    "build:macos": "pkg server.js --targets node20-macos-x64 --output dist/ai-share-macos-x64",
-    "build:macos-arm": "pkg server.js --targets node20-macos-arm64 --output dist/ai-share-macos-arm64",
+    "build": "pkg server.js --targets node22-win-x64 --output dist/ai-share.exe",
+    "build-sync": "pkg sync-server.js --targets node22-win-x64 --output dist/ai-share-sync.exe",
+    "build:linux": "pkg server.js --targets node22-linux-x64 --output dist/ai-share-linux-x64",
+    "build:macos": "pkg server.js --targets node22-macos-x64 --output dist/ai-share-macos-x64",
+    "build:macos-arm": "pkg server.js --targets node22-macos-arm64 --output dist/ai-share-macos-arm64",
     "test": "node test/collect.test.js && node test/sync.test.js",
     "lint": "node --check server.js && node --check sync-server.js && node --check lib/store.js && node --check lib/export.js && node --check lib/crypto.js && node --check lib/sync.js && node --check public/app.js"
   },
@@ -26,14 +26,14 @@
       "public/**/*"
     ],
     "targets": [
-      "node20-win-x64",
-      "node20-linux-x64",
-      "node20-macos-x64",
-      "node20-macos-arm64"
+      "node22-win-x64",
+      "node22-linux-x64",
+      "node22-macos-x64",
+      "node22-macos-arm64"
     ],
     "outputPath": "dist"
   },
   "devDependencies": {
-    "@yao-pkg/pkg": "6.6.0"
+    "@yao-pkg/pkg": "6.22.0"
   }
 }
