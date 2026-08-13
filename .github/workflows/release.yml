@@ -113,8 +113,9 @@ jobs:
 
           ok=0
           # pkg 打的 exe 在 CI runner 上首次解包 + Node 启动可能耗时较久，
-          # 等待窗口放宽到 120s，避免误判（实测冷启动接近 30s）
-          for i in $(seq 1 120); do
+          # pkg 打的 exe 首次解包 + Node 启动在 CI runner 上实测可达 121s，
+          # 等待窗口放宽到 300s，并预留充足余量（避免差 1 秒而误判）
+          for i in $(seq 1 300); do
             # server.js 已显式绑定 0.0.0.0，IPv4 回环必然可达；
             # 同时保留 IPv6 探测以兼容纯 IPv6 环境
             if curl -fsS --max-time 2 http://127.0.0.1:4737/ >/dev/null 2>&1 \
@@ -135,13 +136,15 @@ jobs:
           echo "--- listening sockets ---"
           (command -v ss >/dev/null && ss -lntp 2>/dev/null | grep -E '4737|LISTEN' ) || true
 
-          kill $PID 2>/dev/null
           if [ "$ok" != "1" ]; then
+            # 诊断须在 kill 之前做，否则 server 已退出会误报 Connection refused
             echo "--- curl -v diagnosis ---"
             curl -v --max-time 5 http://127.0.0.1:4737/ 2>&1 || true
-            echo "FAIL: server did not respond in 30s" >&2
+            kill $PID 2>/dev/null
+            echo "FAIL: server 在 300s 内未响应" >&2
             exit 1
           fi
+          kill $PID 2>/dev/null
           echo "OK: server responded"
 
       - name: Smoke test (windows)
@@ -157,7 +160,9 @@ jobs:
               -RedirectStandardOutput smoke.log -RedirectStandardError smoke.err `
               -PassThru -WindowStyle Hidden
           $ok = $false
-          for ($i = 0; $i -lt 120; $i++) {
+          # pkg 打的 exe 首次解包 + Node 启动在 CI runner 上实测可达 121s，
+          # 等待窗口放宽到 300s，并预留充足余量
+          for ($i = 0; $i -lt 300; $i++) {
             if ($p.HasExited) { Write-Output '进程提前退出'; break }
             try {
               Invoke-WebRequest -Uri 'http://127.0.0.1:4737/' -TimeoutSec 2 -UseBasicParsing | Out-Null
@@ -169,8 +174,13 @@ jobs:
           if (Test-Path smoke.err) { Get-Content smoke.err }
           Write-Output '--- listening ports ---'
           try { Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -eq 4737 } | Format-Table -AutoSize | Out-String | Write-Output } catch { Write-Output 'Get-NetTCPConnection 不可用' }
+          if (-not $ok) {
+            # 诊断须在停止进程之前做，否则 server 已退出会误报 Connection refused
+            try { Invoke-WebRequest -Uri 'http://127.0.0.1:4737/' -TimeoutSec 5 -UseBasicParsing | Out-Null } catch { Write-Output 'curl -v 诊断: 连接被拒绝（server 未监听）' }
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+            Write-Error 'FAIL: server 在 300s 内未响应'; exit 1
+          }
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
-          if (-not $ok) { Write-Error 'FAIL: server did not respond in 30s'; exit 1 }
           Write-Output 'OK: server responded'
 
       - uses: actions/upload-artifact@v4
