@@ -108,13 +108,24 @@ jobs:
         run: |
           set +e
           echo "PORT=$PORT"
-          "./dist/${{ matrix.artifact }}" > smoke.log 2>&1 &
+          BIN="dist/${{ matrix.artifact }}"
+
+          # 预热：首次启动让 pkg 完成解包/初始化（实测 CI 上可达 121~304s），
+          # 杀掉后二次启动复用解包缓存，通常秒起，显著缩短有效等待。
+          "$BIN" > /dev/null 2>&1 &
+          WP=$!
+          for i in $(seq 1 360); do
+            kill -0 $WP 2>/dev/null || break
+            sleep 1
+          done
+          kill $WP 2>/dev/null; wait $WP 2>/dev/null
+
+          # 正式冒烟：此时解包缓存已热，进程应快速监听
+          "$BIN" > smoke.log 2>&1 &
           PID=$!
 
           ok=0
-          # pkg 打的 exe 在 CI runner 上首次解包 + Node 启动可能耗时较久，
-          # pkg 打的 exe 首次解包 + Node 启动在 CI runner 上实测可达 121s，
-          # 等待窗口放宽到 300s，并预留充足余量（避免差 1 秒而误判）
+          # 等待窗口 300s（二次启动应远低于此；首启波动也留足余量）
           for i in $(seq 1 300); do
             # server.js 已显式绑定 0.0.0.0，IPv4 回环必然可达；
             # 同时保留 IPv6 探测以兼容纯 IPv6 环境
@@ -156,12 +167,23 @@ jobs:
         run: |
           $ProgressPreference = 'SilentlyContinue'
           Write-Output "PORT=$env:PORT"
-          $p = Start-Process -FilePath "dist/${{ matrix.artifact }}" `
+          $BIN = "dist/${{ matrix.artifact }}"
+
+          # 预热：首次启动让 pkg 完成解包/初始化（实测 CI 上可达 121~304s），
+          # 杀掉后二次启动复用解包缓存，通常秒起，显著缩短有效等待。
+          $wp = Start-Process -FilePath $BIN -RedirectStandardOutput NUL -RedirectStandardError NUL -PassThru -WindowStyle Hidden
+          for ($i = 0; $i -lt 360; $i++) {
+            if ($wp.HasExited) { break }
+            Start-Sleep -Seconds 1
+          }
+          Stop-Process -Id $wp.Id -Force -ErrorAction SilentlyContinue
+
+          # 正式冒烟：此时解包缓存已热，进程应快速监听
+          $p = Start-Process -FilePath $BIN `
               -RedirectStandardOutput smoke.log -RedirectStandardError smoke.err `
               -PassThru -WindowStyle Hidden
           $ok = $false
-          # pkg 打的 exe 首次解包 + Node 启动在 CI runner 上实测可达 121s，
-          # 等待窗口放宽到 300s，并预留充足余量
+          # 等待窗口 300s（二次启动应远低于此；首启波动也留足余量）
           for ($i = 0; $i -lt 300; $i++) {
             if ($p.HasExited) { Write-Output '进程提前退出'; break }
             try {
