@@ -6,16 +6,21 @@ const { COLLECTIONS, list, get, create, update, remove, rewrite, exportAll, rest
 const { exportProfile, applyExport, detectClients, scanClientMcp, scanClientSkills, scanClientPrompts, expand, syncRepo } = require('./lib/export');
 const sync = require('./lib/sync');
 const vault = require('./lib/crypto');
-// 应用根目录：server.js 与 public/ 同级（源码模式与 exe 解压模式均如此）
+// 写数据根：pkg 下 exe 所在目录（可写，用于 data/ 与 .salt），源码模式即项目根
 const APP_ROOT = process.pkg
   ? path.dirname(process.execPath)
   : __dirname;
 
-// 加密盐文件放在资源根 data/ 下（与 store.js 的 DATA_DIR 同根），而非 app 内部
+// 读资源根：pkg 下 __dirname 指向 snapshot 根（含 public/ 等打包资源），
+// 而 path.dirname(execPath) 是 dist/，dist/public 在 snapshot 中并不存在，
+// 因此静态资源必须基于 __dirname 解析，否则生产 exe 访问 / 会 404。
+const READ_ROOT = __dirname;
+
+// 加密盐文件放在数据根 data/ 下（与 store.js 的 DATA_DIR 同根），而非 app 内部
 const SALT_FILE = path.join(APP_ROOT, 'data', '.salt');
 
 const PORT = process.env.PORT || 4737;
-const PUBLIC = path.join(APP_ROOT, 'public');
+const PUBLIC = path.join(READ_ROOT, 'public');
 
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
