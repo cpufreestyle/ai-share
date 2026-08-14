@@ -171,7 +171,7 @@ jobs:
 
           # 预热：首次启动让 pkg 完成解包/初始化（实测 CI 上可达 121~304s），
           # 杀掉后二次启动复用解包缓存，通常秒起，显著缩短有效等待。
-          $wp = Start-Process -FilePath $BIN -RedirectStandardOutput NUL -RedirectStandardError NUL -PassThru -WindowStyle Hidden
+          $wp = Start-Process -FilePath $BIN -RedirectStandardOutput wp.out -RedirectStandardError wp.err -PassThru -WindowStyle Hidden
           for ($i = 0; $i -lt 360; $i++) {
             if ($wp.HasExited) { break }
             Start-Sleep -Seconds 1
