@@ -107,6 +107,17 @@ button { font-family: inherit; cursor: pointer; border: none; border-radius: 8px
 
 .section-desc { color: var(--muted); margin: -6px 0 18px; font-size: 13px; }
 
+/* 列表页搜索框 */
+.search {
+  width: 100%; max-width: 360px; margin-bottom: 14px; background: var(--bg);
+  border: 1px solid var(--border); color: var(--text); border-radius: 8px;
+  padding: 9px 12px; font-size: 13px; font-family: inherit;
+}
+.search:focus { outline: none; border-color: var(--accent); }
+
+/* 应用内确认框正文 */
+.confirm-text { margin: 0; color: var(--text); line-height: 1.6; }
+
 .improw { display: flex; align-items: center; gap: 8px; padding: 7px 10px; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; margin-top: 6px; font-size: 13px; }
 .improw .impmeta { color: var(--muted); font-size: 12px; word-break: break-all; }
 .impactions { margin-top: 12px; }

@@ -1,15 +1,23 @@
 'use strict';
 
 /* ---------- API ---------- */
+// 统一请求封装：非 2xx 时抛错（含服务端 error 信息），响应非 JSON 时兜底为空对象
+async function jfetch(url, opts) {
+  const res = await fetch(url, opts);
+  let data = {};
+  try { data = await res.json(); } catch (e) { data = {}; }
+  if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+  return data;
+}
 const api = {
-  list: c => fetch('/api/' + c).then(r => r.json()),
-  get: (c, id) => fetch(`/api/${c}/${id}`).then(r => r.json()),
-  create: (c, body) => fetch('/api/' + c, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()),
-  update: (c, id, body) => fetch(`/api/${c}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()),
-  remove: (c, id) => fetch(`/api/${c}/${id}`, { method: 'DELETE' }).then(r => r.json()),
-  export: id => fetch('/api/export/' + id).then(r => r.json()),
-  apply: id => fetch(`/api/export/${id}/apply`, { method: 'POST' }).then(r => r.json()),
-  postBundle: bundle => fetch('/api/profiles/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bundle }) }).then(r => r.json()),
+  list: c => jfetch('/api/' + c),
+  get: (c, id) => jfetch(`/api/${c}/${id}`),
+  create: (c, body) => jfetch('/api/' + c, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  update: (c, id, body) => jfetch(`/api/${c}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  remove: (c, id) => jfetch(`/api/${c}/${id}`, { method: 'DELETE' }),
+  export: id => jfetch('/api/export/' + id),
+  apply: id => jfetch(`/api/export/${id}/apply`, { method: 'POST' }),
+  postBundle: bundle => jfetch('/api/profiles/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bundle }) }),
 };
 
 /* ---------- 密钥保险库（主密码） ---------- */
@@ -65,7 +73,18 @@ function showInfoModal(title, text) {
   const body = $('#modalBody');
   body.innerHTML = `<pre class="infotext">${esc(text)}</pre>`;
   $('#modalTitle').textContent = title;
+  $('#modalSave').textContent = '关闭';
+  $('#modalSave').onclick = closeModal;
   $('#modal').classList.remove('hidden');
+}
+// 应用内确认框（替代原生 confirm，兼容部分禁用 confirm 的 WebView）
+function confirmModal(title, text, onOk, okLabel = '确认') {
+  const body = $('#modalBody');
+  body.innerHTML = `<p class="confirm-text">${esc(text)}</p>`;
+  $('#modalTitle').textContent = title;
+  $('#modalSave').textContent = okLabel;
+  $('#modal').classList.remove('hidden');
+  $('#modalSave').onclick = () => { closeModal(); onOk(); };
 }
 
 /* ---------- 集合 Schema ---------- */
@@ -255,7 +274,7 @@ function openForm(col, item, onSave) {
       }
     }
     const p = isNew ? api.create(col, out) : api.update(col, item.id, out);
-    p.then(() => { closeModal(); onSave(); toast(isNew ? '已创建' : '已保存'); });
+    p.then(() => { closeModal(); onSave(); toast(isNew ? '已创建' : '已保存'); }).catch(e => toast('保存失败：' + e.message));
   };
 }
 function closeModal() { $('#modal').classList.add('hidden'); }
@@ -264,7 +283,6 @@ $('#modalClose').onclick = closeModal;
 /* ---------- 通用列表视图 ---------- */
 async function renderCollection(col) {
   const schema = SCHEMAS[col];
-  const items = await api.list(col);
   $('#pageTitle').textContent = schema.label;
   const impBtn = (col === 'mcpservers' || col === 'skillrepos' || col === 'prompts') ? `<button class="btn" id="impBtn">从客户端导入</button>` : '';
   const syncBtn = (col === 'repos') ? `<button class="btn" id="syncAllBtn">同步全部启用仓库</button>` : '';
@@ -276,9 +294,19 @@ async function renderCollection(col) {
   else if (col === 'repos') $('#syncAllBtn').onclick = syncAllRepos;
 
   const view = $('#view');
+  // 加载状态占位：数据量大时先给反馈，避免白屏等待
+  view.innerHTML = `<div class="empty">加载中…</div>`;
+
+  let items;
+  try {
+    items = await api.list(col);
+  } catch (e) {
+    view.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
+    return;
+  }
   if (!items.length) { view.innerHTML = `<div class="empty">暂无数据，点击右上角「新建」添加。</div>`; return; }
 
-  const rows = items.map(it => {
+  const rowHtml = it => {
     let desc = schema.descField === '_desc'
       ? (col === 'repos'
         ? (it.type === 'git' ? (it.url || '（未填 Git 地址）') : (it.path || '（未填本地路径）'))
@@ -292,15 +320,35 @@ async function renderCollection(col) {
       <div class="meta"><div class="title">${esc(it[schema.titleField])} ${pill}</div><div class="desc">${esc(desc)}</div>${syncInfo}${tags}</div>
       <div class="ops">${extra}<button class="btn sm" data-edit="${it.id}">编辑</button><button class="btn sm danger" data-del="${it.id}">删除</button></div>
     </div>`;
-  }).join('');
+  };
+  // 关键词匹配：名称 / 描述 / 标签
+  const matches = (it, q) => {
+    const hay = [it[schema.titleField], (schema.descField === '_desc' ? '' : it[schema.descField]), (it[schema.tagsField] || []).join(' ')].join(' ').toLowerCase();
+    return hay.includes(q);
+  };
+  const bindRows = (root) => {
+    root.querySelectorAll('[data-edit]').forEach(b => b.onclick = async () => {
+      try { const it = await api.get(col, b.dataset.edit); openForm(col, it, () => renderCollection(col)); }
+      catch (e) { toast('获取详情失败：' + e.message); }
+    });
+    root.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
+      confirmModal('确认删除', '删除后不可恢复，确定删除该条记录？', () => {
+        api.remove(col, b.dataset.del).then(() => { toast('已删除'); renderCollection(col); }).catch(e => toast('删除失败：' + e.message));
+      });
+    });
+    root.querySelectorAll('[data-sync]').forEach(b => b.onclick = () => syncRepo(b.dataset.sync));
+  };
 
-  view.innerHTML = `<div class="section-desc">集中维护 ${schema.label}，可在「共享 / 导出」中一键应用到各客户端。</div><div class="list">${rows}</div>`;
-  view.querySelectorAll('[data-edit]').forEach(b => b.onclick = async () => { const it = await api.get(col, b.dataset.edit); openForm(col, it, () => renderCollection(col)); });
-  view.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
-    if (!confirm('确认删除？')) return;
-    api.remove(col, b.dataset.del).then(() => { toast('已删除'); renderCollection(col); });
-  });
-  view.querySelectorAll('[data-sync]').forEach(b => b.onclick = () => syncRepo(b.dataset.sync));
+  view.innerHTML = `<div class="section-desc">集中维护 ${schema.label}，可在「共享 / 导出」中一键应用到各客户端。</div>
+    <input id="listSearch" class="search" type="text" placeholder="搜索 ${schema.label}…" autocomplete="off"/>
+    <div class="list" id="listBox"></div>`;
+  const listBox = $('#listBox');
+  const paint = (list) => { listBox.innerHTML = list.length ? list.map(rowHtml).join('') : '<div class="empty">无匹配结果</div>'; bindRows(listBox); };
+  paint(items);
+  $('#listSearch').oninput = () => {
+    const q = $('#listSearch').value.trim().toLowerCase();
+    paint(q ? items.filter(it => matches(it, q)) : items);
+  };
 }
 
 /* ---------- 仓库同步 ---------- */
@@ -313,7 +361,9 @@ async function syncRepo(id) {
   renderCollection('repos');
 }
 async function syncAllRepos() {
-  const repos = await api.list('repos');
+  let repos;
+  try { repos = await api.list('repos'); }
+  catch (e) { toast('加载仓库失败：' + e.message); return; }
   const enabled = repos.filter(r => r.enabled);
   if (!enabled.length) return toast('没有已启用的仓库');
   toast('正在同步全部仓库…');
@@ -434,8 +484,10 @@ async function openImportPromptFromClient() {
 
 /* ---------- Profile 编辑器 ---------- */
 async function renderProfiles() {
-  const profiles = await api.list('profiles');
   $('#pageTitle').textContent = '共享配置（切换方案）';
+  let profiles;
+  try { profiles = await api.list('profiles'); }
+  catch (e) { $('#view').innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; return; }
   $('#topActions').innerHTML = `<button class="btn" id="importPf">导入方案文件</button><button class="btn primary" id="newBtn">+ 新建方案</button>`;
   $('#newBtn').onclick = () => editProfile(null);
   $('#importPf').onclick = () => {
@@ -446,7 +498,7 @@ async function renderProfiles() {
       rd.onload = () => {
         try {
           const bundle = JSON.parse(rd.result);
-          api.postBundle(bundle).then(r => { toast(r.ok ? '方案已导入' : '导入失败'); renderProfiles(); });
+          api.postBundle(bundle).then(r => { toast(r.ok ? '方案已导入' : '导入失败'); renderProfiles(); }).catch(e => toast('导入失败：' + e.message));
         } catch (e) { toast('文件解析失败'); }
       };
       rd.readAsText(f);
@@ -466,7 +518,10 @@ async function renderProfiles() {
       <button class="btn sm danger" data-del="${p.id}">删除</button>
     </div></div>`).join('');
   view.innerHTML = `<div class="section-desc">一个「方案」= 一组可共享的资源组合，切换客户端时直接套用。可导出为单文件分享，或导入他人方案。</div><div class="list">${rows}</div>`;
-  view.querySelectorAll('[data-edit]').forEach(b => b.onclick = async () => { const p = await api.get('profiles', b.dataset.edit); editProfile(p); });
+  view.querySelectorAll('[data-edit]').forEach(b => b.onclick = async () => {
+    try { const p = await api.get('profiles', b.dataset.edit); editProfile(p); }
+    catch (e) { toast('获取方案失败：' + e.message); }
+  });
   view.querySelectorAll('[data-export]').forEach(b => b.onclick = () => { currentProfile = b.dataset.export; renderExport(); navTo('export'); });
   view.querySelectorAll('[data-bundle]').forEach(b => b.onclick = async () => {
     const bundle = await fetch('/api/profiles/' + b.dataset.bundle + '/export').then(r => r.json());
@@ -474,13 +529,20 @@ async function renderProfiles() {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'ai-share-profile.json'; a.click();
     toast('已导出方案文件');
   });
-  view.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { if (confirm('确认删除？')) api.remove('profiles', b.dataset.del).then(() => { toast('已删除'); renderProfiles(); }); });
+  view.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
+    confirmModal('确认删除', '删除方案后不可恢复，确定删除？', () => {
+      api.remove('profiles', b.dataset.del).then(() => { toast('已删除'); renderProfiles(); }).catch(e => toast('删除失败：' + e.message));
+    });
+  });
 }
 
 async function editProfile(p) {
-  const [providers, prompts, mcps, skills, clients] = await Promise.all([
-    api.list('providers'), api.list('prompts'), api.list('mcpservers'), api.list('skillrepos'), api.list('clients')
-  ]);
+  let providers, prompts, mcps, skills, clients;
+  try {
+    [providers, prompts, mcps, skills, clients] = await Promise.all([
+      api.list('providers'), api.list('prompts'), api.list('mcpservers'), api.list('skillrepos'), api.list('clients')
+    ]);
+  } catch (e) { toast('加载资源失败：' + e.message); return; }
   const cur = p || { name: '', providerId: '', promptIds: [], mcpServerIds: [], skillRepoIds: [], clientIds: [], injectEnv: false };
   const checks = (items, sel, key) => items.map(i => `<label><input type="checkbox" class="ck" data-k="${key}" value="${i.id}" ${(sel || []).includes(i.id) ? 'checked' : ''}/> ${esc(i.name)}</label>`).join('') || '<span class="hint">（空）</span>';
 
@@ -503,15 +565,17 @@ async function editProfile(p) {
     const out = { name: $('#p_name').value || '未命名方案', providerId: $('#p_provider').value, promptIds: gather('promptIds'), mcpServerIds: gather('mcpServerIds'), skillRepoIds: gather('skillRepoIds'), clientIds: gather('clientIds'), injectEnv: $('#p_env').checked };
     if (!out.name) return toast('请填写方案名称');
     const call = p ? api.update('profiles', p.id, out) : api.create('profiles', out);
-    call.then(() => { toast('已保存'); renderProfiles(); });
+    call.then(() => { toast('已保存'); renderProfiles(); }).catch(e => toast('保存失败：' + e.message));
   };
 }
 
 /* ---------- 导出 / 共享 ---------- */
 let currentProfile = null;
 async function renderExport() {
-  const profiles = await api.list('profiles');
   $('#pageTitle').textContent = '共享 / 导出';
+  let profiles;
+  try { profiles = await api.list('profiles'); }
+  catch (e) { $('#view').innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; return; }
   $('#topActions').innerHTML = `<button class="btn primary" id="applyAll">全部写入客户端</button>`;
   const view = $('#view');
   if (!profiles.length) { view.innerHTML = `<div class="empty">请先在「共享配置」中创建方案。</div>`; return; }
@@ -522,14 +586,16 @@ async function renderExport() {
     <div class="field" style="max-width:320px">${sel}</div><div id="exportOut"></div>`;
   $('#pfSel').onchange = () => { currentProfile = $('#pfSel').value; loadExport(); };
   $('#applyAll').onclick = () => api.apply(currentProfile).then(r => {
-    const lines = (r.results || []).map(x => `${x.ok ? '✓' : '✗'} ${esc(x.clientName || x.clientId)}: ${esc(x.path || x.error)}`);
-    alert('写入结果：\n' + lines.join('\n'));
-  });
+    const lines = (r.results || []).map(x => `${x.ok ? '✓' : '✗'} ${x.clientName || x.clientId}: ${x.path || x.error}`);
+    showInfoModal('写入结果', lines.join('\n'));
+  }).catch(e => toast('写入失败：' + e.message));
   loadExport();
 }
 
 async function loadExport() {
-  const data = await api.export(currentProfile);
+  let data;
+  try { data = await api.export(currentProfile); }
+  catch (e) { $('#exportOut').innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; return; }
   const out = $('#exportOut');
   if (!data || !data.configs.length) { out.innerHTML = `<div class="empty">该方案未关联任何启用中的客户端。</div>`; return; }
   out.innerHTML = data.configs.map((c, i) => `<div class="card export-card">
@@ -554,7 +620,7 @@ async function loadExport() {
     api.apply(currentProfile).then(r => {
       const x = (r.results || [])[b.dataset.write];
       if (x && x.ok) toast('已写入 ' + x.clientName); else toast('失败：' + (x?.error || '未知'));
-    });
+    }).catch(e => toast('写入失败：' + e.message));
   });
 }
 
@@ -704,7 +770,9 @@ $('#collectBtn').onclick = async () => {
   $('#colClose').onclick = closeModal;
   $('#colWrite').onclick = async () => {
     closeModal();
-    const profiles = await api.list('profiles');
+    let profiles;
+    try { profiles = await api.list('profiles'); }
+    catch (e) { toast('加载方案失败：' + e.message); return; }
     currentProfile = (profiles[0] && profiles[0].id) || null;
     renderExport(); navTo('export');
     toast('已打开「共享 / 导出」，可点「全部写入客户端」');

@@ -31,12 +31,20 @@ const MIME = {
   '.json': 'application/json', '.svg': 'image/svg+xml', '.ico': 'image/x-icon'
 };
 
-function send(res, code, body, mime = 'application/json') {
+function send(res, code, body, mime = 'application/json', extraHeaders) {
   let payload;
   if (Buffer.isBuffer(body)) payload = body;
   else if (typeof body === 'string') payload = Buffer.from(body, 'utf8');
   else payload = Buffer.from(JSON.stringify(body), 'utf8');
-  res.writeHead(code, { 'Content-Type': mime + '; charset=utf-8', 'Content-Length': payload.length, 'Cache-Control': 'no-store' });
+  // 安全头：服务监听 0.0.0.0 可能被局域网访问，补充基础防护
+  const headers = Object.assign({
+    'Content-Type': mime + '; charset=utf-8',
+    'Content-Length': payload.length,
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+  }, extraHeaders || {});
+  res.writeHead(code, headers);
   res.end(payload);
 }
 
@@ -58,7 +66,18 @@ function serveStatic(req, res, urlPath) {
   // 前缀必须带上分隔符，否则同级目录（如 public-evil/）可凭字符串前缀碰撞绕过校验
   if (!fp.startsWith(PUBLIC + path.sep)) return send(res, 403, { error: 'forbidden' });
   if (!fs.existsSync(fp) || !fs.statSync(fp).isFile()) return send(res, 404, { error: 'not found' });
-  send(res, 200, fs.readFileSync(fp), MIME[path.extname(fp)] || 'application/octet-stream');
+  const stat = fs.statSync(fp);
+  // 以「大小+修改时间」生成 ETag：客户端再访带 If-None-Match 时返回 304，
+  // 避免静态资源每次全量重传（原 no-store 每次下载）。
+  const etag = '"' + stat.size.toString(16) + '-' + Math.round(stat.mtimeMs).toString(16) + '"';
+  if (req.headers['if-none-match'] === etag) {
+    res.writeHead(304, { 'ETag': etag, 'Cache-Control': 'no-cache' });
+    return res.end();
+  }
+  send(res, 200, fs.readFileSync(fp), MIME[path.extname(fp)] || 'application/octet-stream', {
+    'ETag': etag,
+    'Cache-Control': 'no-cache', // 每次都带 ETag 校验；命中 304 时省去重传
+  });
 }
 
 // 声明式路由表：精确匹配 method+path，handler(ctx) 返回响应体（已自动 JSON 序列化）
