@@ -20,6 +20,10 @@ const READ_ROOT = __dirname;
 const SALT_FILE = path.join(APP_ROOT, 'data', '.salt');
 
 const PORT = process.env.PORT || 4737;
+// 默认只监听本机回环地址：服务无任何鉴权，且备份接口可导出明文密钥，
+// 直接暴露到局域网会让同网段设备拿走全部 API Key。确需跨设备访问时
+// 显式设置 HOST=0.0.0.0（或指定网卡 IP）。
+const HOST = process.env.HOST || '127.0.0.1';
 const PUBLIC = path.join(READ_ROOT, 'public');
 
 const MIME = {
@@ -51,7 +55,8 @@ function readBody(req) {
 function serveStatic(req, res, urlPath) {
   const rel = urlPath === '/' ? '/index.html' : urlPath;
   const fp = path.normalize(path.join(PUBLIC, rel));
-  if (!fp.startsWith(PUBLIC)) return send(res, 403, { error: 'forbidden' });
+  // 前缀必须带上分隔符，否则同级目录（如 public-evil/）可凭字符串前缀碰撞绕过校验
+  if (!fp.startsWith(PUBLIC + path.sep)) return send(res, 403, { error: 'forbidden' });
   if (!fs.existsSync(fp) || !fs.statSync(fp).isFile()) return send(res, 404, { error: 'not found' });
   send(res, 200, fs.readFileSync(fp), MIME[path.extname(fp)] || 'application/octet-stream');
 }
@@ -176,7 +181,7 @@ const ROUTES = [
       if (wrong) { vault.clearKey(); return sendJson(ctx.res, 200, { ok: false, error: '密码错误' }); }
       return sendJson(ctx.res, 200, { ok: true });
     } },
-  { method: 'POST', test: p => p === '/api/vault/lock', handler: () => ({ ok: true }) },
+  { method: 'POST', test: p => p === '/api/vault/lock', handler: () => { vault.clearKey(); return { ok: true }; } },
 
   // 仓库同步：将某仓库（local 目录）扫描导入到其 resourceType 对应的集合
   { method: 'POST', test: p => /^\/api\/repos\/([\w-]+)\/sync$/.test(p), handler: (ctx) => {
@@ -276,8 +281,9 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`AI Share 已启动: http://localhost:${PORT}  (监听 0.0.0.0:${PORT})`);
+server.listen(PORT, HOST, () => {
+  const shown = HOST === '0.0.0.0' ? '0.0.0.0（已对局域网开放，注意服务无鉴权）' : HOST;
+  console.log(`AI Share 已启动: http://localhost:${PORT}  (监听 ${shown}:${PORT})`);
   // 重启后按已保存的配置恢复定时同步，避免自动同步静默失效
   const s = sync.startAuto();
   if (s.running) console.log(`定时同步已启用，每 ${s.intervalMinutes} 分钟一次`);

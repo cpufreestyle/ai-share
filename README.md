@@ -59,6 +59,7 @@ node server.js
 
 > 可用环境变量改端口：`PORT=8080 node server.js`
 > 设置 `AI_SHARE_NO_OPEN=1` 可禁止自动打开浏览器。
+> 默认仅监听本机 `127.0.0.1`（服务无鉴权，且备份接口可导出明文密钥，不应直接暴露到局域网）；如确需从其他设备访问：`HOST=0.0.0.0 node server.js`。
 
 ## 开发与测试
 
@@ -131,7 +132,7 @@ ai share/
 ## 进阶能力
 
 - **密钥加密存储**：`providers.apiKey` 在落盘时以 AES-256-GCM 加密（密钥存于 `data/.key`，已加入 `.gitignore`）。磁盘上是密文，应用内读取/编辑时自动解密。备份文件中密钥为明文以便迁移，请妥善保管。
-- **客户端路径自动探测**：在「Agent 客户端」编辑表单中点击「自动探测」，会**实际扫描**该客户端是否已安装（检查常见可执行文件位置）以及是否已有配置文件，并自动填回对应的默认配置文件路径（含 `{APPDATA}`/`{USERPROFILE}` 占位符）。
+- **客户端路径自动探测**：在「Agent 客户端」编辑表单中点击「自动探测」，会**实际扫描**该客户端是否已安装（检查常见可执行文件位置，Windows 检查安装目录，macOS 检查 `/Applications`，Linux 检查常见 bin 路径）以及是否已有配置文件，并自动填回对应的默认配置文件路径（含 `{APPDATA}`/`{USERPROFILE}` 占位符）。占位符跨平台可用：Windows 展开为对应系统目录，macOS 的 `{APPDATA}`/`{LOCALAPPDATA}` 映射到 `~/Library/Application Support`，Linux 遵循 XDG 惯例（`~/.config` / `~/.local/share`）。
 - **从客户端反向导入 MCP 配置**：在「MCP 服务器」页点击「从客户端导入」，选择某个已安装客户端，工具会**直接读取该客户端电脑上的真实配置文件**（如 `claude_desktop_config.json`、`.cursor/mcp.json`），解析其中的 `mcpServers` 并清单预览、可勾选，确认后一键搬入本系统统一管理。同名服务器自动更新、不同名则新增，方便把散落在各客户端的 MCP 配置集中收口。
 - **从客户端汇总 Skill 到仓库**：在「Skill 仓库」页点击「从客户端导入」，选择客户端后工具会**逐个扫描其本地 skill 目录**（如 `~/.codebuddy/skills`、`~/.claude/skills`），解析每个 skill 文件夹中的 `SKILL.md`（读取 `name` / `description` frontmatter），预览并勾选后一键登记进「Skill 仓库」（以本地仓库形式，路径即 skill 文件夹）。按文件夹路径合并，避免重复。
 - **从客户端汇总提示词/规则到资源**：在「提示词」页点击「从客户端导入」，选择客户端后工具会**逐个扫描其提示词/规则文件**——Claude 的 `~/.claude/CLAUDE.md` 与 `rules/`，Cursor 的 `~/.cursor/rules/*.mdc`，VS Code 的 `copilot-instructions.md`，CodeBuddy 的 `rules/` 与 `CODEBUDDY.md` 等，读取内容并预览、可勾选，确认后一键登记进「提示词」资源（以文件路径去重，重复导入则更新内容并合并来源标签）。

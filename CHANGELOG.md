@@ -3,6 +3,23 @@
 本项目的所有重要变更都会记录在此文件中。
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.3.9] - 2026-08-15
+
+### 修复
+
+- **「锁定保险库」实际不生效**：`POST /api/vault/lock` 仅返回成功，未调用 `vault.clearKey()`，主密码派生密钥仍留在内存中，且状态接口随即回显「已解锁」，界面提示与真实状态不符。现锁定时真正清除内存密钥，锁定后读取密钥需重新解锁。
+- **服务默认监听 `0.0.0.0` 暴露到局域网**：本应用无任何鉴权，且 `/api/backup/export` 会返回明文 API Key，绑定全部网卡意味着同网段任意设备可直接取走全部密钥。现默认只监听 `127.0.0.1`，确需跨设备访问时显式设置 `HOST=0.0.0.0`（或指定网卡 IP），启动日志会给出风险提示。
+- **静态文件路径前缀校验缺分隔符**：`serveStatic` 用 `startsWith(PUBLIC)` 判断路径归属，同级目录（如 `public-evil/`）可凭字符串前缀碰撞绕过；改为 `startsWith(PUBLIC + path.sep)`。
+
+### 新增
+
+- **macOS / Linux 客户端探测与采集支持**：`{APPDATA}` / `{LOCALAPPDATA}` 占位符在非 Windows 平台补默认映射（macOS → `~/Library/Application Support`，Linux 遵循 XDG：`~/.config` / `~/.local/share`），使客户端配置扫描、Skill / 提示词采集、一键采集在 macOS / Linux 上开箱可用；「已安装」探测补充 macOS `/Applications` 与 Linux 常见 bin 路径。
+- **种子数据路径跨平台**：首次运行的示例数据不再硬编码 `d:/ai share`（Windows 保持不变），其他平台落在用户主目录 `~/ai share` 下，避免生成永远不存在的 `d:\` 盘路径。
+
+### 变更
+
+- Skill 扫描（客户端扫描与仓库同步）不再对同一 `SKILL.md` 重复读取两次，frontmatter 解析与内容指纹共用一次读取结果。
+
 ## [0.3.8] - 2026-08-14
 
 ### 修复
