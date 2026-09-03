@@ -1,8 +1,11 @@
 #!/usr/bin/env sh
 # AI Share 启动脚本（Linux / macOS）
-# 用法: ./start.sh          前台启动（同时拉起 MCP 桥接器）
-#       ./start.sh -d       后台启动（日志写入 server.log / mcp-bridge.log）
-#       AI_SHARE_MCP=0 ./start.sh   不启动 MCP 桥接器
+# 用法: ./start.sh          前台启动
+#       ./start.sh -d       后台启动（日志写入 server.log）
+#
+# 注意: MCP 桥接器 (mcp-bridge.js) 是 stdio 协议的 MCP server，
+#       必须由 Claude / Cursor / CodeBuddy 等 MCP 客户端按需拉起，不能用本脚本常驻。
+#       在客户端配置里指向: node <ai-share 目录>/mcp-bridge.js 即可（可设 AI_SHARE_URL）。
 set -eu
 
 cd "$(dirname "$0")"
@@ -38,19 +41,11 @@ for pid in $PIDS; do
 done
 [ -n "$PIDS" ] && sleep 1
 
-# --- 启动 MCP 桥接器（供 Claude / Cursor / CodeBuddy 等调用，零依赖）---
-if [ "${AI_SHARE_MCP:-1}" != "0" ] && [ -f "$(dirname "$0")/mcp-bridge.js" ]; then
-  echo "[ai-share] 启动 MCP 桥接器 (mcp-bridge.js) ..."
-  AI_SHARE_URL="${AI_SHARE_URL:-http://127.0.0.1:${PORT}}" \
-    nohup node "$(dirname "$0")/mcp-bridge.js" >mcp-bridge.log 2>&1 &
-  echo "[ai-share] MCP 桥接器已启动 (PID $!), 日志: mcp-bridge.log"
-fi
-
 # --- 启动 ---
 echo "[ai-share] 启动服务 (http://localhost:${PORT}) ..."
 if [ "${1:-}" = "-d" ]; then
   PORT="$PORT" nohup node server.js >server.log 2>&1 &
-  echo "[ai-share] 已后台启动 (PID $!)，日志: server.log"
+  echo "[ai-share] 已后台启动 (PID $!), 日志: server.log"
 else
   PORT="$PORT" exec node server.js
 fi
