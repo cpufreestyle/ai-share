@@ -44,7 +44,7 @@ done
 # --- 启动 ---
 echo "[ai-share] 启动服务 (http://localhost:${PORT}) ..."
 if [ "${1:-}" = "-d" ]; then
-  PORT="$PORT" nohup node server.js >server.log 2>&1 &
+  PORT="$PORT" setsid node server.js >server.log 2>&1 < /dev/null &
   echo "[ai-share] 已后台启动 (PID $!), 日志: server.log"
 else
   PORT="$PORT" exec node server.js
