@@ -14,8 +14,26 @@ const http = require('http');
 const BASE = (process.env.AI_SHARE_URL || 'http://127.0.0.1:4737').replace(/\/$/, '');
 const COLLECTIONS = ['providers', 'prompts', 'mcpservers', 'skillrepos', 'clients', 'profiles', 'repos'];
 
+// ---------- 服务未启动时按需拉起（WSL 重启后无需手动 start） ----------
+let _serverStarted = false;
+function ensureServer() {
+  if (_serverStarted) return Promise.resolve();
+  _serverStarted = true;
+  return new Promise((resolve) => {
+    try {
+      const { spawn } = require('child_process');
+      const dir = require('path').dirname(__filename);
+      const p = spawn('bash', ['-c', 'cd ' + JSON.stringify(dir) + ' && ./start.sh -d'],
+        { detached: true, stdio: 'ignore' });
+      p.on('error', () => {});
+      p.unref();
+    } catch (e) { /* 启动失败时由调用方返回错误 */ }
+    setTimeout(resolve, 2500);
+  });
+}
+
 // ---------- 调 ai-share REST API ----------
-function api(method, path, body) {
+function api(method, path, body, _retried) {
   return new Promise((resolve, reject) => {
     const data = body ? JSON.stringify(body) : null;
     const u = new URL(BASE + path);
@@ -35,7 +53,11 @@ function api(method, path, body) {
         try { resolve(JSON.parse(buf)); } catch (e) { reject(new Error('ai-share 返回非 JSON: ' + buf.slice(0, 120))); }
       });
     });
-    r.on('error', reject);
+    r.on('error', (e) => {
+      if (!_retried && (e.code === 'ECONNREFUSED' || e.code === 'ENOTFOUND' || e.code === 'ECONNRESET')) {
+        ensureServer().then(() => api(method, path, body, true).then(resolve, reject));
+      } else reject(e);
+    });
     if (data) r.write(data);
     r.end();
   });
