@@ -39,6 +39,17 @@ function renderVault() {
     }
   }).catch(() => { el.textContent = '● 本地服务已连接'; });
 }
+/* ---------- 数据目录展示 ---------- */
+// 数据目录由 DATA_DIR 推导（可用环境变量 AI_SHARE_DATA_DIR 覆盖），
+// 并不位于程序安装目录；这里显式展示，避免误判数据存放位置。
+function renderDataDir() {
+  const el = document.getElementById('dataDir');
+  if (!el) return;
+  fetch('/api/system/info').then(r => r.json()).then(s => {
+    el.innerHTML = '<span title="' + s.dataDir + '">📁 数据目录 <code>' + s.dataDir + '</code></span>';
+  }).catch(() => { el.textContent = ''; });
+}
+
 function openVaultSet() {
   const body = document.getElementById('modalBody');
   body.innerHTML = `<div class="field"><label>设置主密码</label><input id="vpw" type="password" placeholder="用于解锁密钥"/></div>
@@ -807,6 +818,7 @@ window.addEventListener('unhandledrejection', (e) => {
 function boot() {
   buildNav();
   renderVault();
+  renderDataDir();
   navTo('profiles');
 }
 if (document.readyState === 'loading') {

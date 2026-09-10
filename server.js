@@ -2,7 +2,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { COLLECTIONS, list, get, create, update, remove, rewrite, exportAll, restoreAll, exportProfileBundle, importProfileBundle, importScannedServers, importScannedSkills, importScannedPrompts, collectFromClients } = require('./lib/store');
+const { COLLECTIONS, DATA_DIR, purgeTombstones, list, get, create, update, remove, rewrite, exportAll, restoreAll, exportProfileBundle, importProfileBundle, importScannedServers, importScannedSkills, importScannedPrompts, collectFromClients } = require('./lib/store');
 const { exportProfile, applyExport, detectClients, scanClientMcp, scanClientSkills, scanClientPrompts, expand, syncRepo } = require('./lib/export');
 const sync = require('./lib/sync');
 const vault = require('./lib/crypto');
@@ -128,6 +128,22 @@ const ROUTES = [
       const mode = body.mode === 'replace' ? 'replace' : 'merge';
       return sendJson(ctx.res, 200, restoreAll(body.data, mode));
     } },
+
+  // 墓碑 GC：清理过期的删除墓碑（默认保留 30 天）
+  { method: 'POST', test: p => p === '/api/maintenance/purge-tombstones', handler: async (ctx) => {
+      const body = await readBody(ctx.req);
+      const r = purgeTombstones(body && body.days != null ? body.days : 30);
+      if (r.error) return sendJson(ctx.res, 400, { error: r.error });
+      return sendJson(ctx.res, 200, r);
+    } },
+
+  // 系统信息：供界面展示真实数据目录（避免误以为数据存放在程序目录下）
+  { method: 'GET', test: p => p === '/api/system/info', handler: (ctx) => sendJson(ctx.res, 200, {
+      dataDir: DATA_DIR,
+      platform: process.platform,
+      node: process.version,
+      packed: !!process.pkg,
+    }) },
 
   // 网络双向同步：配置读写、立即同步、定时开关
   { method: 'GET', test: p => p === '/api/sync/config', handler: (ctx) => {
