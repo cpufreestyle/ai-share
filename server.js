@@ -6,6 +6,7 @@ const { COLLECTIONS, DATA_DIR, purgeTombstones, list, get, create, update, remov
 const { exportProfile, applyExport, detectClients, scanClientMcp, scanClientSkills, scanClientPrompts, expand, syncRepo } = require('./lib/export');
 const sync = require('./lib/sync');
 const vault = require('./lib/crypto');
+const { isCrossSite, hasJsonContentType } = require('./lib/security');
 // 写数据根：pkg 下 exe 所在目录（可写，用于 data/ 与 .salt），源码模式即项目根
 const APP_ROOT = process.pkg
   ? path.dirname(process.execPath)
@@ -297,6 +298,15 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && !p.startsWith('/api/')) {
       return serveStatic(req, res, p);
+    }
+
+    // 防本地 CSRF：服务无鉴权且监听回环，浏览器里的任意网页都能向本服务发请求。
+    // 同源策略挡得住「读响应」，挡不住「触发副作用」（如改写客户端配置）。
+    // ① 拒绝跨站来源；② 写请求要求 application/json（强制跨站预检，预检不被应答即被浏览器拦下）。
+    // 非浏览器客户端（Node / MCP 桥接器）不发 Origin，不受影响。
+    if (p.startsWith('/api/')) {
+      if (isCrossSite(req.headers)) return send(res, 403, { error: '拒绝跨站请求' });
+      if (!hasJsonContentType(req.headers)) return send(res, 415, { error: 'Content-Type 必须为 application/json' });
     }
 
     for (const route of ROUTES) {

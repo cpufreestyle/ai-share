@@ -12,8 +12,8 @@
     "build:linux": "pkg server.js --targets node22-linux-x64 --output dist/ai-share-linux-x64",
     "build:macos": "pkg server.js --targets node22-macos-x64 --output dist/ai-share-macos-x64",
     "build:macos-arm": "pkg server.js --targets node22-macos-arm64 --output dist/ai-share-macos-arm64",
-    "test": "node test/collect.test.js && node test/sync.test.js && node test/store-atomic.test.js && node test/store-tombstone.test.js",
-    "lint": "node --check server.js && node --check sync-server.js && node --check lib/store.js && node --check lib/export.js && node --check lib/crypto.js && node --check lib/sync.js && node --check public/app.js"
+    "test": "node test/collect.test.js && node test/sync.test.js && node test/store-atomic.test.js && node test/store-tombstone.test.js && node test/security.test.js && node test/apply-export.test.js",
+    "lint": "node --check server.js && node --check sync-server.js && node --check lib/store.js && node --check lib/export.js && node --check lib/crypto.js && node --check lib/sync.js && node --check lib/security.js && node --check public/app.js"
   },
   "engines": {
     "node": ">=16"
