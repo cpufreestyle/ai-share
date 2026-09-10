@@ -335,21 +335,28 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, HOST, () => {
-  const shown = HOST === '0.0.0.0' ? '0.0.0.0（已对局域网开放，注意服务无鉴权）' : HOST;
-  console.log(`AI Share 已启动: http://localhost:${PORT}  (监听 ${shown}:${PORT})`);
-  // 重启后按已保存的配置恢复定时同步，避免自动同步静默失效
-  const s = sync.startAuto();
-  if (s.running) console.log(`定时同步已启用，每 ${s.intervalMinutes} 分钟一次`);
+function startServer() {
+  server.listen(PORT, HOST, () => {
+    const shown = HOST === '0.0.0.0' ? '0.0.0.0（已对局域网开放，注意服务无鉴权）' : HOST;
+    console.log(`AI Share 已启动: http://localhost:${PORT}  (监听 ${shown}:${PORT})`);
+    // 重启后按已保存的配置恢复定时同步，避免自动同步静默失效
+    const s = sync.startAuto();
+    if (s.running) console.log(`定时同步已启用，每 ${s.intervalMinutes} 分钟一次`);
 
-  // 本机自动打开浏览器（设置 AI_SHARE_NO_OPEN=1 可关闭）
-  if (!process.env.AI_SHARE_NO_OPEN) {
-    const { spawn } = require('child_process');
-    const url = `http://localhost:${PORT}/`;
-    let op, args;
-    if (process.platform === 'win32') { op = 'cmd'; args = ['/c', 'start', '', url]; }
-    else if (process.platform === 'darwin') { op = 'open'; args = [url]; }
-    else { op = 'xdg-open'; args = [url]; } // Linux / BSD
-    try { spawn(op, args, { detached: true, stdio: 'ignore' }).unref(); } catch (_) {}
-  }
-});
+    // 本机自动打开浏览器（设置 AI_SHARE_NO_OPEN=1 可关闭）
+    if (!process.env.AI_SHARE_NO_OPEN) {
+      const { spawn } = require('child_process');
+      const url = `http://localhost:${PORT}/`;
+      let op, args;
+      if (process.platform === 'win32') { op = 'cmd'; args = ['/c', 'start', '', url]; }
+      else if (process.platform === 'darwin') { op = 'open'; args = [url]; }
+      else { op = 'xdg-open'; args = [url]; } // Linux / BSD
+      try { spawn(op, args, { detached: true, stdio: 'ignore' }).unref(); } catch (_) {}
+    }
+  });
+}
+
+// 仅作为入口直接运行时才监听；被 require（如集成测试）时不自动启动。
+if (require.main === module) startServer();
+
+module.exports = server;
