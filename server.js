@@ -2,6 +2,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const { COLLECTIONS, DATA_DIR, purgeTombstones, list, get, create, update, remove, rewrite, exportAll, restoreAll, exportProfileBundle, importProfileBundle, importScannedServers, importScannedSkills, importScannedPrompts, collectFromClients } = require('./lib/store');
 const { exportProfile, applyExport, detectClients, scanClientMcp, scanClientSkills, scanClientPrompts, expand, syncRepo } = require('./lib/export');
 const sync = require('./lib/sync');
@@ -49,12 +50,16 @@ function send(res, code, body, mime = 'application/json', extraHeaders) {
   res.end(payload);
 }
 
+// 请求体上限：按「字节」计（此前用字符串 length，即 UTF-16 码元数，多字节内容会被放大数倍）
+const MAX_BODY = 5 * 1024 * 1024;
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
+    let bytes = 0;
     req.on('data', c => {
+      bytes += c.length; // Buffer.length 即字节数
       data += c;
-      if (data.length > 5e6) { req.destroy(); reject(new Error('请求体过大')); } // 超限直接 reject，避免 Promise 永不 settle
+      if (bytes > MAX_BODY) { req.destroy(); reject(new Error('请求体过大')); } // 超限直接 reject，避免 Promise 永不 settle
     });
     req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch (e) { reject(e); } });
     req.on('error', reject);
@@ -68,17 +73,21 @@ function serveStatic(req, res, urlPath) {
   if (!fp.startsWith(PUBLIC + path.sep)) return send(res, 403, { error: 'forbidden' });
   if (!fs.existsSync(fp) || !fs.statSync(fp).isFile()) return send(res, 404, { error: 'not found' });
   const stat = fs.statSync(fp);
-  // 以「大小+修改时间」生成 ETag：客户端再访带 If-None-Match 时返回 304，
-  // 避免静态资源每次全量重传（原 no-store 每次下载）。
-  const etag = '"' + stat.size.toString(16) + '-' + Math.round(stat.mtimeMs).toString(16) + '"';
+  const ext = path.extname(fp);
+  // 仅对文本类资源做 gzip；图片/图标本身已压缩，再压无收益且白耗 CPU
+  const compressible = new Set(['.html', '.js', '.css', '.json', '.svg', '.txt', '.md']).has(ext.toLowerCase());
+  const useGzip = compressible && String(req.headers['accept-encoding'] || '').indexOf('gzip') !== -1;
+  // ETag 必须与「编码」绑定：同一资源的 gzip 与非 gzip 字节不同，不能共用一个 ETag
+  const etag = '"' + stat.size.toString(16) + '-' + Math.round(stat.mtimeMs).toString(16) + (useGzip ? '-gz' : '') + '"';
   if (req.headers['if-none-match'] === etag) {
-    res.writeHead(304, { 'ETag': etag, 'Cache-Control': 'no-cache' });
+    res.writeHead(304, { 'ETag': etag, 'Cache-Control': 'no-cache', 'Vary': 'Accept-Encoding' });
     return res.end();
   }
-  send(res, 200, fs.readFileSync(fp), MIME[path.extname(fp)] || 'application/octet-stream', {
-    'ETag': etag,
-    'Cache-Control': 'no-cache', // 每次都带 ETag 校验；命中 304 时省去重传
-  });
+  const raw = fs.readFileSync(fp);
+  const headers = { 'ETag': etag, 'Cache-Control': 'no-cache', 'Vary': 'Accept-Encoding' };
+  let body = raw;
+  if (useGzip) { body = zlib.gzipSync(raw); headers['Content-Encoding'] = 'gzip'; }
+  send(res, 200, body, MIME[ext] || 'application/octet-stream', headers);
 }
 
 // 声明式路由表：精确匹配 method+path，handler(ctx) 返回响应体（已自动 JSON 序列化）
