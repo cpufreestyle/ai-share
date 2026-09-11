@@ -7,7 +7,15 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      # 混合平台：本项目大量逻辑与平台相关（WSL /mnt/c 大小写、
+      # process.platform 分支、{APPDATA} 占位符展开、Windows 启动脚本），
+      # 只在 Linux 跑会漏掉这些回归。
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
