@@ -8,9 +8,13 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { mergeLWW, SYNC_COLLECTIONS } = require('./lib/sync');
+const { writeFileAtomic } = require('./lib/fsutil');
 
 const PORT = process.env.SYNC_PORT || 4738;
 const TOKEN = process.env.SYNC_TOKEN || '';
+// 默认只监听回环，避免未设 SYNC_TOKEN 时把权威数据暴露到局域网；
+// 如需跨设备同步，显式设置 SYNC_HOST=0.0.0.0（并务必同时设置 SYNC_TOKEN）。
+const HOST = process.env.SYNC_HOST || '127.0.0.1';
 const APP_ROOT = process.pkg
   ? path.dirname(process.execPath)
   : __dirname;
@@ -24,11 +28,26 @@ function readCol(col) {
   ensureDir();
   const f = fileFor(col);
   if (!fs.existsSync(f)) return [];
-  try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_) { return []; }
+  try {
+    return JSON.parse(fs.readFileSync(f, 'utf8'));
+  } catch (e) {
+    // 主文件损坏：先隔离证据，再尝试用上一份完好的 .bak 自动回滚。
+    try { fs.renameSync(f, f + '.corrupt-' + Date.now()); } catch (e2) { /* noop */ }
+    const bak = f + '.bak';
+    if (fs.existsSync(bak)) {
+      try {
+        fs.copyFileSync(bak, f);
+        return JSON.parse(fs.readFileSync(f, 'utf8'));
+      } catch (e3) { /* 回滚失败：继续抛出，交给上层返回 500 */ }
+    }
+    // 无法恢复：抛出而非返回 []，杜绝「解析失败即清空权威数据」的数据丢失。
+    throw new Error('集合文件损坏且无法从备份恢复：' + col);
+  }
 }
 function writeCol(col, items) {
   ensureDir();
-  fs.writeFileSync(fileFor(col), JSON.stringify(items, null, 2));
+  // 原子写（同 lib/fsutil）：tmp → fsync → rename，并保留上一版本 .bak
+  writeFileAtomic(fileFor(col), JSON.stringify(items, null, 2));
 }
 
 function sendJson(res, code, obj) {
@@ -71,8 +90,16 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const incoming = Array.isArray(body.items) ? body.items : [];
       // 服务端以自身存量为 local、客户端上报为 remote 做合并，结果即权威全量
-      const { merged } = mergeLWW(readCol(col), incoming);
-      writeCol(col, merged);
+      let merged;
+      try {
+        merged = mergeLWW(readCol(col), incoming).merged;
+        writeCol(col, merged);
+      } catch (e) {
+        // 存储层错误（含「文件损坏且无法回滚」）单独归为 500，
+        // 且绝不把损坏当成空集去覆盖，避免清空权威数据。
+        console.error('[sync-server] 存储错误(' + col + '):', e.message);
+        return sendJson(res, 500, { error: '服务端存储错误' });
+      }
       return sendJson(res, 200, { items: merged, count: merged.length });
     } catch (e) {
       return sendJson(res, 400, { error: e.message || String(e) });
@@ -83,13 +110,20 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
-  // 不指定 host：Node 会监听 :: 并接受 IPv4 映射，避免客户端用 localhost
-  // 解析到 ::1 时连不上（Windows 常见）
-  server.listen(PORT, () => {
-    console.log(`AI Share 同步服务端已启动: http://localhost:${PORT}`);
+  // 默认只绑回环；跨设备同步需显式 SYNC_HOST（并务必配 SYNC_TOKEN）。
+  server.listen(PORT, HOST, () => {
+    const exposed = !(HOST === '127.0.0.1' || HOST === 'localhost' || HOST === '::1');
+    console.log(`AI Share 同步服务端已启动: http://${HOST}:${PORT}`);
     console.log(`数据目录: ${DATA_DIR}`);
-    console.log(TOKEN ? '鉴权: 已启用 (SYNC_TOKEN)' : '鉴权: 未启用，建议设置 SYNC_TOKEN 环境变量');
+    if (TOKEN) {
+      console.log('鉴权: 已启用 (SYNC_TOKEN)');
+    } else if (exposed) {
+      console.warn('⚠ 未设置 SYNC_TOKEN 却监听对外地址：任何能访问该端口的设备都可读写全部同步数据，请立刻设置 SYNC_TOKEN。');
+    } else {
+      console.log('鉴权: 未启用（当前仅监听本机回环，外部无法直接访问）');
+    }
+    if (!exposed) console.log('跨设备同步：需设置 SYNC_HOST=0.0.0.0 并配置 SYNC_TOKEN 后重启');
   });
 }
 
-module.exports = { server, DATA_DIR };
+module.exports = { server, DATA_DIR, HOST, TOKEN };
