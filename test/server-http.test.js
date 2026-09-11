@@ -50,6 +50,12 @@ server.listen(0, '127.0.0.1', async () => {
     r = await request(port, '/api/paths/validate', { 'Content-Type': 'application/json' }, 'POST', '{"paths":[]}');
     ok('application/json 写请求放行 200', r.status === 200);
 
+    r = await request(port, '/api/paths/validate', { 'Content-Type': 'application/json' }, 'POST', '{bad');
+    ok('非法 JSON 请求体返回 400（保留客户端提示）', r.status === 400);
+
+    r = await request(port, '/api/paths/validate', { 'Content-Type': 'application/json' }, 'POST', '{"paths":[123]}');
+    ok('服务器内部错误返回 500 且已脱敏', r.status === 500 && r.body.indexOf('内部错误') !== -1 && r.body.indexOf('ERR_') === -1);
+
     r = await request(port, '/app.js', { 'Accept-Encoding': 'gzip' });
     ok('静态资源 gzip：200', r.status === 200);
     ok('静态资源 gzip：Content-Encoding=gzip', r.headers['content-encoding'] === 'gzip');

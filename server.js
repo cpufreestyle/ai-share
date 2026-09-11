@@ -52,6 +52,8 @@ function send(res, code, body, mime = 'application/json', extraHeaders) {
 
 // 请求体上限：按「字节」计（此前用字符串 length，即 UTF-16 码元数，多字节内容会被放大数倍）
 const MAX_BODY = 5 * 1024 * 1024;
+// 客户端错误（400）：提示原样回传；服务器错误（500）统一脱敏，见下方 catch
+function badRequest(msg) { const e = new Error(msg); e.status = 400; return e; }
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
@@ -59,9 +61,12 @@ function readBody(req) {
     req.on('data', c => {
       bytes += c.length; // Buffer.length 即字节数
       data += c;
-      if (bytes > MAX_BODY) { req.destroy(); reject(new Error('请求体过大')); } // 超限直接 reject，避免 Promise 永不 settle
+      if (bytes > MAX_BODY) { req.destroy(); reject(badRequest('请求体过大')); } // 超限直接 reject，避免 Promise 永不 settle
     });
-    req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch (e) { reject(e); } });
+    req.on('end', () => {
+      if (!data) return resolve({});
+      try { resolve(JSON.parse(data)); } catch (e) { reject(badRequest('请求体不是合法 JSON')); }
+    });
     req.on('error', reject);
   });
 }
@@ -331,7 +336,14 @@ const server = http.createServer(async (req, res) => {
     console.error('[404] not found:', req.method, p);
     return send(res, 404, { error: 'not found' });
   } catch (e) {
-    return send(res, 500, { error: e.message });
+    // 客户端错误（带 status，如请求体非法）原样回传；服务器错误统一脱敏，
+    // 细节只写日志，避免把内部路径等经接口泄露（AI_SHARE_DEBUG=1 时透出）。
+    const status = (e && e.status) || 500;
+    if (status >= 500) console.error('[server] 未处理异常:', (e && e.stack) || e);
+    const detail = status >= 500
+      ? (process.env.AI_SHARE_DEBUG ? (e && e.message) : '内部错误')
+      : (e && e.message);
+    return send(res, status, { error: detail });
   }
 });
 
