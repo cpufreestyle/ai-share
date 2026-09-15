@@ -14,6 +14,7 @@ process.env.AI_SHARE_DATA_DIR = tmpData;
 process.env.AI_SHARE_NO_OPEN = '1';
 
 const server = require('../server');
+const store = require('../lib/store');
 
 let passed = 0;
 function ok(name, cond) { assert.ok(cond, name); console.log('  ✓ ' + name); passed++; }
@@ -53,7 +54,12 @@ server.listen(0, '127.0.0.1', async () => {
     r = await request(port, '/api/paths/validate', { 'Content-Type': 'application/json' }, 'POST', '{bad');
     ok('非法 JSON 请求体返回 400（保留客户端提示）', r.status === 400);
 
-    r = await request(port, '/api/paths/validate', { 'Content-Type': 'application/json' }, 'POST', '{"paths":[123]}');
+    r = await request(port, '/api/paths/validate', { 'Content-Type': 'application/json' }, 'POST', '{"paths":[123,"ok"]}');
+    ok('非字符串路径被忽略（不再 500）', r.status === 200 && JSON.parse(r.body).results.length === 1);
+
+    // 故意用非法类型字段（数字 baseUrl）让 handler 内部抛异常，验证服务器错误的脱敏行为
+    const badProv = store.create('providers', { name: 'bad-type', baseUrl: 123 });
+    r = await request(port, '/api/providers/' + badProv.id + '/test', { 'Content-Type': 'application/json' }, 'POST', '{}');
     ok('服务器内部错误返回 500 且已脱敏', r.status === 500 && r.body.indexOf('内部错误') !== -1 && r.body.indexOf('ERR_') === -1);
 
     r = await request(port, '/app.js', { 'Accept-Encoding': 'gzip' });

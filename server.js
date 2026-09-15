@@ -126,7 +126,8 @@ const ROUTES = [
   // 路径校验（供表单保存提示）
   { method: 'POST', test: p => p === '/api/paths/validate', handler: async (ctx) => {
       const body = await readBody(ctx.req);
-      const paths = Array.isArray(body.paths) ? body.paths : [];
+      // 只接受字符串路径：数字 / null 等会让展开函数内部 .split 抛出 TypeError（表现为 500）
+      const paths = Array.isArray(body.paths) ? body.paths.filter((p) => typeof p === 'string' && p.trim()) : [];
       const results = paths.map(pth => { const e = expand(pth); return { path: pth, expanded: e, exists: fs.existsSync(e) }; });
       return sendJson(ctx.res, 200, { results });
     } },
