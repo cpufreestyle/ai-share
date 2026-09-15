@@ -222,3 +222,10 @@ button:active:not(:disabled) { filter: brightness(.94); }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* 命令面板 Ctrl/Cmd+K */
+#palette .modal-body { padding: 12px 14px 16px; }
+#palette .search { max-width: none; margin-bottom: 0; }
+.pal-item { cursor: pointer; }
+.pal-item.pal-active, .pal-item:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); }
+.pal-item .desc { font-size: 12px; }

@@ -3,7 +3,8 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
-const { COLLECTIONS, DATA_DIR, purgeTombstones, list, get, create, update, remove, rewrite, exportAll, restoreAll, exportProfileBundle, importProfileBundle, importScannedServers, importScannedSkills, importScannedPrompts, collectFromClients } = require('./lib/store');
+const { COLLECTIONS, DATA_DIR, purgeTombstones, list, get, create, update, remove, rewrite, exportAll, restoreAll, exportProfileBundle, importProfileBundle, importScannedServers, importScannedSkills, importScannedPrompts, collectFromClients, restore, listDeleted } = require('./lib/store');
+const { probeProvider, checkMcp } = require('./lib/probe');
 const { exportProfile, applyExport, detectClients, scanClientMcp, scanClientSkills, scanClientPrompts, expand, syncRepo } = require('./lib/export');
 const sync = require('./lib/sync');
 const vault = require('./lib/crypto');
@@ -280,6 +281,35 @@ const ROUTES = [
       const body = await readBody(ctx.req);
       return sendJson(ctx.res, 200, Object.assign(importScannedPrompts(pickSelected(r.prompts, body.selected)), { warnings: r.warnings || [] }));
     } },
+  // 连通性探测：Provider 密钥可用性 / MCP 服务器可运行性
+  { method: 'POST', test: p => /^\/api\/providers\/[\w-]+\/test$/.test(p), handler: async (ctx) => {
+      const id = ctx.p.split('/')[3];
+      const prov = get('providers', id);
+      if (!prov) return sendJson(ctx.res, 404, { error: 'provider 不存在' });
+      const r = await probeProvider(prov);
+      return sendJson(ctx.res, 200, r);
+    } },
+  { method: 'POST', test: p => /^\/api\/mcpservers\/[\w-]+\/check$/.test(p), handler: async (ctx) => {
+      const id = ctx.p.split('/')[3];
+      const srv = get('mcpservers', id);
+      if (!srv) return sendJson(ctx.res, 404, { error: 'mcpserver 不存在' });
+      const r = await checkMcp(srv);
+      return sendJson(ctx.res, 200, r);
+    } },
+  // 回收站：列出 / 恢复已删除（墓碑）记录
+  { method: 'GET', test: p => /^\/api\/[\w]+\/deleted$/.test(p), handler: (ctx) => {
+      const col = ctx.p.split('/')[2];
+      if (!COLLECTIONS.includes(col)) return sendJson(ctx.res, 400, { error: '未知集合' });
+      return sendJson(ctx.res, 200, listDeleted(col));
+    } },
+  { method: 'POST', test: p => /^\/api\/[\w]+\/[\w-]+\/restore$/.test(p), handler: async (ctx) => {
+      const parts = ctx.p.split('/');
+      const col = parts[2], id = parts[3];
+      if (!COLLECTIONS.includes(col)) return sendJson(ctx.res, 400, { error: '未知集合' });
+      const r = restore(col, id);
+      return sendJson(ctx.res, r ? 200 : 404, r || { error: '不存在' });
+    } },
+
 ];
 
 // 资源 CRUD: /api/:col  /api/:col/:id

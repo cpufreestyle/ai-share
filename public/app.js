@@ -325,7 +325,9 @@ async function renderCollection(col) {
       : it[schema.descField] || '';
     const tags = schema.tagsField ? (it[schema.tagsField] || []).map(t => `<span class="tag">${esc(t)}</span>`).join('') : '';
     const pill = ('enabled' in it) ? `<span class="pill ${it.enabled ? 'on' : 'off'}">${it.enabled ? '启用' : '停用'}</span>` : '';
-    const extra = (col === 'repos') ? `<button class="btn sm" data-sync="${it.id}">同步</button>` : '';
+    const extra = (col === 'repos' ? `<button class="btn sm" data-sync="${it.id}">同步</button>` : '')
+      + (col === 'providers' ? `<button class="btn sm" data-test="${it.id}">测试</button>` : '')
+      + (col === 'mcpservers' ? `<button class="btn sm" data-check="${it.id}">检查</button>` : '');
     const syncInfo = (col === 'repos' && it.lastSyncAt) ? `<div class="desc sub">上次同步：${esc(new Date(it.lastSyncAt).toLocaleString())}</div>` : '';
     return `<div class="row">
       <div class="meta"><div class="title">${esc(it[schema.titleField])} ${pill}</div><div class="desc">${esc(desc)}</div>${syncInfo}${tags}</div>
@@ -348,6 +350,18 @@ async function renderCollection(col) {
       });
     });
     root.querySelectorAll('[data-sync]').forEach(b => b.onclick = () => syncRepo(b.dataset.sync));
+    root.querySelectorAll('[data-test]').forEach(b => b.onclick = async () => {
+      const id = b.dataset.test; b.disabled = true; const old = b.textContent; b.textContent = '测试中…';
+      const r = await fetch('/api/providers/' + id + '/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(x => x.json()).catch(() => ({ ok: false, error: '请求失败' }));
+      b.disabled = false; b.textContent = old;
+      toast(r.ok ? ('连通（' + (r.status || '?') + '，' + (r.ms || '?') + 'ms）') : ('测试失败：' + (r.error || '未知')));
+    });
+    root.querySelectorAll('[data-check]').forEach(b => b.onclick = async () => {
+      const id = b.dataset.check; b.disabled = true; const old = b.textContent; b.textContent = '检查中…';
+      const r = await fetch('/api/mcpservers/' + id + '/check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(x => x.json()).catch(() => ({ ok: false, error: '请求失败' }));
+      b.disabled = false; b.textContent = old;
+      toast(r.ok ? (r.kind === 'url' ? ('URL 可达（' + (r.status || '?') + '）') : (r.note || 'stdio 配置有效')) : ('检查未通过：' + (r.error || '未知')));
+    });
   };
 
   view.innerHTML = `<div class="section-desc">集中维护 ${schema.label}，可在「共享 / 导出」中一键应用到各客户端。</div>
@@ -743,6 +757,7 @@ const PAGES = {
   export: renderExport,
   sync: renderSync,
   backup: renderBackup,
+  trash: renderTrash,
 };
 function navTo(key) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.k === key));
@@ -760,6 +775,7 @@ function buildNav() {
     { k: 'export', label: '共享 / 导出', icon: '📤' },
     { k: 'sync', label: '网络同步', icon: '🔄' },
     { k: 'backup', label: '备份 / 迁移', icon: '💾' },
+    { k: 'trash', label: '回收站', icon: '🗑️' },
   ];
   $('#nav').innerHTML = items.map(i => `<div class="nav-item" data-k="${i.k}"><span class="ic">${i.icon}</span>${i.label}</div>`).join('');
   $('#nav').querySelectorAll('.nav-item').forEach(n => n.onclick = () => navTo(n.dataset.k));
@@ -815,8 +831,92 @@ window.addEventListener('unhandledrejection', (e) => {
 
 // 防御性初始化：DOM 就绪后再构建界面，规避部分 WebView 内核
 // 在脚本执行时机差异下出现的布局/元素读取竞态。
+/* ---------- 全局搜索（命令面板 Ctrl/Cmd+K） ---------- */
+function initPalette() {
+  if (document.getElementById('palette')) return;
+  const el = document.createElement('div');
+  el.id = 'palette';
+  el.className = 'modal hidden';
+  el.innerHTML = '<div class="modal-box" style="max-width:660px"><div class="modal-head"><span>全局搜索</span><button id="palClose">✕</button></div><div class="modal-body"><input id="palInput" class="search" style="max-width:none" placeholder="搜索任意资源（名称 / 描述 / 标签）…" autocomplete="off"/><div id="palResults" class="list" style="margin-top:10px"></div></div></div>';
+  document.body.appendChild(el);
+  const input = el.querySelector('#palInput');
+  const results = el.querySelector('#palResults');
+  let items = [], active = 0, loading = false;
+  const close = () => el.classList.add('hidden');
+  el.querySelector('#palClose').onclick = close;
+  el.onclick = (e) => { if (e.target === el) close(); };
+  const activate = async (col, id) => {
+    close();
+    navTo(col);
+    try { const it = await api.get(col, id); openForm(col, it, () => renderCollection(col)); }
+    catch (e) { toast('打开失败：' + e.message); }
+  };
+  const paint = (list) => {
+    if (!list.length) { results.innerHTML = '<div class="empty">无匹配结果</div>'; return; }
+    results.innerHTML = list.map(({ col, it }, i) => {
+      const s = SCHEMAS[col];
+      return '<div class="row pal-item ' + (i === active ? 'pal-active' : '') + '" data-col="' + col + '" data-id="' + it.id + '"><div class="meta"><div class="title">' + esc(it[s.titleField]) + ' <span class="pill">' + esc(s.label) + '</span></div><div class="desc">' + esc(String(it[s.descField === '_desc' ? '_desc' : s.descField] || '')) + '</div></div><div class="ops"><button class="btn sm">打开</button></div></div>';
+    }).join('');
+    results.querySelectorAll('.pal-item').forEach(r => r.onclick = () => activate(r.dataset.col, r.dataset.id));
+  };
+  const render = (q) => {
+    q = (q || '').trim().toLowerCase();
+    const matched = q ? items.filter(({ col, it }) => {
+      const s = SCHEMAS[col];
+      const hay = [it[s.titleField], it[s.descField === '_desc' ? '_desc' : s.descField], (it[s.tagsField] || []).join(' ')].join(' ').toLowerCase();
+      return hay.includes(q);
+    }) : items.slice(0, 50);
+    active = 0;
+    paint(matched.slice(0, 50));
+  };
+  const load = async () => {
+    if (loading) return; loading = true;
+    items = [];
+    for (const col of Object.keys(SCHEMAS).filter(c => c !== 'profiles')) {
+      try { const arr = await api.list(col); items.push(...arr.map(it => ({ col, it }))); } catch (e) {}
+    }
+    loading = false;
+    render(input.value);
+  };
+  input.oninput = () => render(input.value);
+  input.onkeydown = (e) => {
+    const els = results.querySelectorAll('.pal-item');
+    if (e.key === 'ArrowDown') { e.preventDefault(); if (els.length) { els[active] && els[active].classList.remove('pal-active'); active = (active + 1) % els.length; els[active].classList.add('pal-active'); els[active].scrollIntoView({ block: 'nearest' }); } }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); if (els.length) { els[active] && els[active].classList.remove('pal-active'); active = (active - 1 + els.length) % els.length; els[active].classList.add('pal-active'); els[active].scrollIntoView({ block: 'nearest' }); } }
+    else if (e.key === 'Enter') { e.preventDefault(); if (els[active]) activate(els[active].dataset.col, els[active].dataset.id); }
+    else if (e.key === 'Escape') { e.preventDefault(); close(); }
+  };
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); el.classList.remove('hidden'); load(); setTimeout(() => input.focus(), 0); }
+  });
+  window.__palette = { open: () => { el.classList.remove('hidden'); load(); setTimeout(() => input.focus(), 0); }, close };
+}
+
+/* ---------- 回收站：恢复已删除（墓碑）记录 ---------- */
+async function renderTrash() {
+  $('#pageTitle').textContent = '回收站';
+  $('#topActions').innerHTML = '';
+  const cols = Object.keys(SCHEMAS);
+  let all = [];
+  for (const col of cols) {
+    try { const arr = await api.list(col + '/deleted'); all.push(...arr.map(it => ({ col, it }))); } catch (e) {}
+  }
+  const view = $('#view');
+  if (!all.length) { view.innerHTML = '<div class="empty">回收站为空。删除的记录先保留为墓碑，可在此恢复（默认 30 天后自动清除）。</div>'; return; }
+  view.innerHTML = '<div class="section-desc">各集合中已删除（墓碑）的记录。恢复后重新出现在原列表，并随同步传播。</div><div class="list">' + all.map(({ col, it }) => {
+    const s = SCHEMAS[col];
+    return '<div class="row"><div class="meta"><div class="title">' + esc(it[s.titleField]) + ' <span class="pill">' + esc(s.label) + '</span></div><div class="desc">删除于 ' + esc(new Date(it.updatedAt).toLocaleString()) + '</div></div><div class="ops"><button class="btn sm" data-res="' + col + ':' + it.id + '">恢复</button></div></div>';
+  }).join('') + '</div>';
+  view.querySelectorAll('[data-res]').forEach(b => b.onclick = async () => {
+    const sv = b.dataset.res, i = sv.indexOf(':'), col = sv.slice(0, i), id = sv.slice(i + 1);
+    const r = await fetch('/api/' + col + '/' + id + '/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(x => x.json()).catch(() => ({}));
+    if (r && r.id) { toast('已恢复'); renderTrash(); } else toast('恢复失败：' + (r.error || '未知'));
+  });
+}
+
 function boot() {
   buildNav();
+  initPalette();
   renderVault();
   renderDataDir();
   navTo('profiles');
