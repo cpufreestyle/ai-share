@@ -7,6 +7,7 @@ const { COLLECTIONS, DATA_DIR, purgeTombstones, list, get, create, update, remov
 const { probeProvider, checkMcp } = require('./lib/probe');
 const { exportProfile, applyExport, detectClients, scanClientMcp, scanClientSkills, scanClientPrompts, expand, syncRepo } = require('./lib/export');
 const sync = require('./lib/sync');
+const autobackup = require('./lib/autobackup');
 const vault = require('./lib/crypto');
 const { isCrossSite, hasJsonContentType } = require('./lib/security');
 // 写数据根：pkg 下 exe 所在目录（可写，用于 data/ 与 .salt），源码模式即项目根
@@ -146,6 +147,42 @@ const ROUTES = [
       return sendJson(ctx.res, 200, restoreAll(body.data, mode));
     } },
 
+  // 本地自动备份：定时把全部资源落成带时间戳的快照，滚动保留最近 N 份，支持一键回滚。
+  // 与「网络双向同步」互补——同步管多机一致，快照管单机误操作（误删 / 导入错备份 / 改坏配置）。
+  { method: 'GET', test: p => p === '/api/backup/auto', handler: (ctx) => sendJson(ctx.res, 200, { config: autobackup.getConfig(), status: autobackup.autoStatus() }) },
+  { method: 'PUT', test: p => p === '/api/backup/auto', handler: async (ctx) => {
+      const body = await readBody(ctx.req);
+      const patch = {};
+      if (body && typeof body === 'object') {
+        if (body.enabled != null) patch.enabled = !!body.enabled;
+        if (body.intervalHours != null) patch.intervalHours = Number(body.intervalHours);
+        if (body.keep != null) patch.keep = Number(body.keep);
+        if (typeof body.dir === 'string') patch.dir = body.dir.trim();
+      }
+      const config = autobackup.saveConfig(patch);
+      return sendJson(ctx.res, 200, { config, status: autobackup.startAuto() });
+    } },
+  { method: 'GET', test: p => p === '/api/backup/snapshots', handler: (ctx) => sendJson(ctx.res, 200, { snapshots: autobackup.listSnapshots() }) },
+  { method: 'POST', test: p => p === '/api/backup/snapshot', handler: (ctx) => {
+      // 与手动导出保持一致：主密码启用时必须已解锁，否则快照里只会留下无法还原的密文
+      if (fs.existsSync(SALT_FILE) && !vault.hasKey()) {
+        return sendJson(ctx.res, 423, { error: '主密码已启用，请先在侧边栏解锁后再创建快照' });
+      }
+      return sendJson(ctx.res, 200, autobackup.createSnapshot('manual'));
+    } },
+  { method: 'POST', test: p => p === '/api/backup/snapshots/restore', handler: async (ctx) => {
+      const body = await readBody(ctx.req);
+      const name = body && body.name;
+      if (!name) return sendJson(ctx.res, 400, { error: '缺少 name' });
+      const r = autobackup.restoreSnapshot(name, body.mode === 'replace' ? 'replace' : 'merge');
+      if (r.error) return sendJson(ctx.res, 400, { error: r.error });
+      return sendJson(ctx.res, 200, r);
+    } },
+  { method: 'DELETE', test: p => /^\/api\/backup\/snapshots\/[A-Za-z0-9._-]+$/.test(p), handler: (ctx) => {
+      const r = autobackup.deleteSnapshot(ctx.p.split('/').pop());
+      if (r.error) return sendJson(ctx.res, 400, { error: r.error });
+      return sendJson(ctx.res, 200, r);
+    } },
   // 墓碑 GC：清理过期的删除墓碑（默认保留 30 天）
   { method: 'POST', test: p => p === '/api/maintenance/purge-tombstones', handler: async (ctx) => {
       const body = await readBody(ctx.req);
@@ -385,6 +422,10 @@ function startServer() {
     // 重启后按已保存的配置恢复定时同步，避免自动同步静默失效
     const s = sync.startAuto();
     if (s.running) console.log(`定时同步已启用，每 ${s.intervalMinutes} 分钟一次`);
+
+    // 本地快照：按配置间隔留存回滚点（默认关闭，可在「备份 / 迁移」页开启）
+    const ab = autobackup.startAuto();
+    if (ab.running) console.log(`本地自动备份已启用，每 ${ab.intervalHours} 小时一次，保留 ${ab.keep} 份`);
 
     // 本机自动打开浏览器（设置 AI_SHARE_NO_OPEN=1 可关闭）
     if (!process.env.AI_SHARE_NO_OPEN) {

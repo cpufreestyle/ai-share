@@ -151,6 +151,7 @@ ai share/
 同时跑两个实例（例如忘了关旧窗口又开一个）也不会互相覆盖：每个集合的「读 → 改 → 写」都在跨进程写锁内完成（`lib/lockfile.js`），另一实例持锁时最多等待 5 秒。
 - **本地接口防跨站调用**：服务无鉴权且监听回环，浏览器里的任意网页都能向它发起请求，同源策略挡得住「读响应」却挡不住「触发副作用」。现已在 `/api/*` 统一校验：跨站来源（`Origin` 与 `Host` 不同源、`Sec-Fetch-Site: cross-site`）直接 403；写请求要求 `Content-Type: application/json`，强制跨站请求先过预检。浏览器 UI 与 MCP 桥接器（发 JSON、不带 Origin）不受影响。
 - **静态资源压缩**：HTML / JS / CSS 等按 `Accept-Encoding` 协商 gzip 返回（并带 `Vary: Accept-Encoding`），界面首屏体积明显下降；请求体按字节限制为 5 MB。
+- **本地自动备份与一键回滚**：在「备份 / 迁移」页可开启定时快照（默认每 12 小时、保留 10 份），也能随时手动快照。误删、改坏配置或导入错备份后，可在快照列表里回滚到任一时间点——回滚前会自动存一份当前状态作为「安全快照」，因此回滚本身也是可逆的（`lib/autobackup.js`）。快照是明文，落在数据目录下的 `backups/`，请勿随仓库分发。
 - **密钥加密存储**：`providers.apiKey` 在落盘时以 AES-256-GCM 加密（密钥存于 `data/.key`，已加入 `.gitignore`）。磁盘上是密文，应用内读取/编辑时自动解密。备份文件中密钥为明文以便迁移，请妥善保管。
 - **客户端路径自动探测**：在「Agent 客户端」编辑表单中点击「自动探测」，会**实际扫描**该客户端是否已安装（检查常见可执行文件位置，Windows 检查安装目录，macOS 检查 `/Applications`，Linux 检查常见 bin 路径）以及是否已有配置文件，并自动填回对应的默认配置文件路径（含 `{APPDATA}`/`{USERPROFILE}` 占位符）。占位符跨平台可用：Windows 展开为对应系统目录，macOS 的 `{APPDATA}`/`{LOCALAPPDATA}` 映射到 `~/Library/Application Support`，Linux 遵循 XDG 惯例（`~/.config` / `~/.local/share`）。
 - **从客户端反向导入 MCP 配置**：在「MCP 服务器」页点击「从客户端导入」，选择某个已安装客户端，工具会**直接读取该客户端电脑上的真实配置文件**（如 `claude_desktop_config.json`、`.cursor/mcp.json`），解析其中的 `mcpServers` 并清单预览、可勾选，确认后一键搬入本系统统一管理。同名服务器自动更新、不同名则新增，方便把散落在各客户端的 MCP 配置集中收口。

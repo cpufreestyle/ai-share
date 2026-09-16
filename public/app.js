@@ -664,7 +664,21 @@ async function renderBackup() {
        <input type="file" id="bkFile" accept="application/json"/>
        <button class="btn primary" id="bkImport" style="margin-top:10px">导入</button>
      </div></div>
-   </div>`;
+     <div class="card"><div class="card-h">本地自动备份</div><div class="card-b">
+       <div class="field"><label>快照目录</label><span id="bkDir" class="hint"></span></div>
+       <div class="field check"><input type="checkbox" id="bkAutoEnabled"/><label for="bkAutoEnabled">按间隔自动创建本地快照</label></div>
+       <div class="field"><label>间隔（小时）</label><input id="bkAutoHours" type="number" min="1" max="720"/></div>
+       <div class="field"><label>保留份数</label><input id="bkAutoKeep" type="number" min="1" max="50"/></div>
+       <button class="btn primary" id="bkAutoSave">保存设置</button>
+       <button class="btn" id="bkSnapshotNow" style="margin-top:10px">立即创建快照</button>
+       <div class="hint" id="bkAutoStatus" style="margin-top:8px;white-space:pre-line"></div>
+     </div></div>
+   </div>
+   <div class="card" style="margin-top:16px"><div class="card-h">本地快照（一键回滚）</div><div class="card-b">
+     <div class="field"><label>回滚模式</label><select id="bkRestoreMode"><option value="merge">合并（保留快照外的记录）</option><option value="replace">覆盖（以快照完全替换）</option></select></div>
+     <div class="hint" style="margin-bottom:8px">回滚前会自动存一份当前状态快照，可随时退回。</div>
+     <div id="snapList"></div>
+   </div></div>`;
   $('#bkExport').onclick = async () => {
     const data = await fetch('/api/backup/export').then(r => r.json());
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -683,6 +697,66 @@ async function renderBackup() {
     };
     reader.readAsText(file);
   };
+
+  // ---------- 本地自动备份卡片 ----------
+  const snapFmt = (n) => (n ? new Date(n).toLocaleString() : '—');
+  const loadAuto = async () => {
+    const a = await fetch('/api/backup/auto').then(r => r.json()).catch(() => null);
+    if (!a) return;
+    $('#bkAutoEnabled').checked = !!(a.config && a.config.enabled);
+    $('#bkAutoHours').value = (a.config && a.config.intervalHours) || 12;
+    $('#bkAutoKeep').value = (a.config && a.config.keep) || 10;
+    $('#bkDir').textContent = (a.status && a.status.dir) || '';
+    $('#bkAutoStatus').textContent =
+      '当前状态：' + ((a.status && a.status.running) ? '运行中' : '未运行') +
+      '　最近一次：' + snapFmt(a.status && a.status.lastBackupAt) +
+      ((a.status && a.status.lastResult) ? '\n' + a.status.lastResult : '');
+  };
+  $('#bkAutoSave').onclick = async () => {
+    const body = { enabled: $('#bkAutoEnabled').checked, intervalHours: Number($('#bkAutoHours').value) || 12, keep: Number($('#bkAutoKeep').value) || 10 };
+    const r = await fetch('/api/backup/auto', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(x => x.json());
+    toast(r.config ? '已保存自动备份设置' : '保存失败');
+    loadAuto(); renderSnaps();
+  };
+  $('#bkSnapshotNow').onclick = async () => {
+    toast('正在创建快照…');
+    const r = await fetch('/api/backup/snapshot', { method: 'POST' }).then(x => x.json());
+    toast(r.error ? ('创建失败：' + r.error) : ('已创建快照 ' + ((r.snapshot && r.snapshot.name) || '')));
+    loadAuto(); renderSnaps();
+  };
+
+  const renderSnaps = async () => {
+    const r = await fetch('/api/backup/snapshots').then(x => x.json()).catch(() => null);
+    const list = (r && r.snapshots) || [];
+    const el = $('#snapList');
+    if (!list.length) { el.innerHTML = '<p class="hint">还没有快照。开启自动备份或点「立即创建快照」后会出现在这里。</p>'; return; }
+    el.innerHTML = list.map(s => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid #2a2f45;border-radius:8px;margin-bottom:8px;background:#1b1f33">
+        <div style="min-width:0">
+          <div style="font-weight:600">${esc(s.name)}</div>
+          <div class="hint">${(s.size / 1024).toFixed(1)} KB · ${snapFmt(s.takenAt)}${s.corrupt ? ' · 文件损坏' : ''}${s.count != null ? ' · ' + s.count + ' 项' : ''}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          ${s.corrupt ? '' : '<button class="btn small" data-restore="' + esc(s.name) + '">回滚</button>'}
+          <button class="btn small" data-del="${esc(s.name)}" style="border-color:#7a2b2b;color:#ff9b9b">删除</button>
+        </div>
+      </div>`).join('');
+    el.querySelectorAll('[data-restore]').forEach(b => b.onclick = async () => {
+      if (!confirm('回滚到 ' + b.dataset.restore + '？回滚前会自动保存当前状态为安全快照。')) return;
+      const mode = $('#bkRestoreMode').value;
+      const r2 = await fetch('/api/backup/snapshots/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: b.dataset.restore, mode }) }).then(x => x.json());
+      toast(r2.error ? ('回滚失败：' + r2.error) : ('已回滚到 ' + b.dataset.restore));
+      renderSnaps();
+    });
+    el.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+      if (!confirm('删除快照 ' + b.dataset.del + '？此操作不可恢复。')) return;
+      const r2 = await fetch('/api/backup/snapshots/' + encodeURIComponent(b.dataset.del), { method: 'DELETE' }).then(x => x.json());
+      toast(r2.error ? ('删除失败：' + r2.error) : '已删除快照');
+      renderSnaps();
+    });
+  };
+
+  loadAuto(); renderSnaps();
 }
 
 /* ---------- 网络双向同步 ---------- */
