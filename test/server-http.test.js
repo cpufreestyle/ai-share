@@ -41,6 +41,9 @@ server.listen(0, '127.0.0.1', async () => {
   try {
     let r = await request(port, '/api/system/info');
     ok('无 Origin 的 GET 放行 200', r.status === 200);
+    store.create('providers', { name: 'stat-probe', baseUrl: 'https://x.test' });
+    r = await request(port, '/api/system/stats');
+    ok('概览统计接口 200 且 counts.providers>=1（验证取的是 exportAll.collections）', r.status === 200 && (() => { try { const s = JSON.parse(r.body); return s.counts && s.counts.providers >= 1 && typeof s.counts.total === 'number' && typeof s.storageBytes === 'number' && !!s.snapshots; } catch (_) { return false; } })());
 
     r = await request(port, '/api/system/info', { Origin: 'https://evil.example' });
     ok('跨站 Origin GET 拦截 403', r.status === 403);

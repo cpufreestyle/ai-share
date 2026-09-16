@@ -199,6 +199,24 @@ const ROUTES = [
       packed: !!process.pkg,
     }) },
 
+  // 概览统计：供首页仪表盘展示各集合数量、数据占用、快照状态
+  { method: 'GET', test: p => p === '/api/system/stats', handler: (ctx) => {
+      const all = exportAll();
+      const cols = (all && all.collections) || {};
+      const counts = {};
+      for (const k of COLLECTIONS) counts[k] = Array.isArray(cols[k]) ? cols[k].length : 0;
+      counts.total = COLLECTIONS.reduce((s, k) => s + (counts[k] || 0), 0);
+      const sp = autobackup.autoStatus();
+      const du = (p) => { let t = 0; try { for (const e of fs.readdirSync(p, { withFileTypes: true })) { const fp = path.join(p, e.name); if (e.isDirectory()) t += du(fp); else if (e.isFile()) { try { t += fs.statSync(fp).size || 0; } catch (_) {} } } } catch (_) {} return t; };
+      return sendJson(ctx.res, 200, {
+        counts,
+        dataDir: DATA_DIR,
+        storageBytes: du(DATA_DIR),
+        vaultEnabled: vault.hasKey(),
+        snapshots: { dir: sp.dir, enabled: sp.enabled, count: sp.count, lastBackupAt: sp.lastBackupAt, running: sp.running },
+      });
+    } },
+
   // 网络双向同步：配置读写、立即同步、定时开关
   { method: 'GET', test: p => p === '/api/sync/config', handler: (ctx) => {
       const c = sync.getConfig();

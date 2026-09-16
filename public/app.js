@@ -819,8 +819,60 @@ async function renderSync() {
   };
 }
 
+async function renderOverview() {
+  $('#pageTitle').textContent = '概览';
+  $('#topActions').innerHTML = '';
+  $('#view').innerHTML = '<div class="empty">加载中…</div>';
+  let stats;
+  try {
+    stats = await fetch('/api/system/stats').then(r => r.json());
+  } catch (e) {
+    $('#view').innerHTML = '<div class="empty">加载失败：' + (e && e.message) + '</div>';
+    return;
+  }
+  const c = stats.counts || {};
+  const cards = [
+    ['🔌', 'API 端点', c.providers || 0],
+    ['💬', '提示词', c.prompts || 0],
+    ['🧩', 'MCP 服务器', c.mcpservers || 0],
+    ['📦', 'Skill 仓库', c.skillrepos || 0],
+    ['🖥️', 'Agent 客户端', c.clients || 0],
+    ['🗂️', '资源仓库', c.repos || 0],
+    ['🔀', '共享方案', c.profiles || 0],
+    ['🧮', '资源总计', c.total || 0],
+  ];
+  const fmtBytes = (b) => (b == null ? '—' : (b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(1) + ' MB'));
+  const tpl = (icon, label, val) => `<div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow-sm)"><div style="font-size:22px">${icon}</div><div style="font-size:26px;font-weight:700;margin:6px 0 2px">${val}</div><div class="hint">${label}</div></div>`;
+  const sp = stats.snapshots || {};
+  const lastB = sp.lastBackupAt ? new Date(sp.lastBackupAt).toLocaleString() : '—';
+  $('#view').innerHTML = `
+    <div class="section-desc">本机 AI 资源总览。所有数据仅存于本机（${esc(stats.dataDir)}），不上传任何云端${stats.vaultEnabled ? '；密钥保险库已启用' : ''}。</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px;margin-bottom:18px">
+      ${cards.map(x => tpl(x[0], x[1], x[2])).join('')}
+    </div>
+    <div class="layout">
+      <div class="card"><div class="card-h">本地快照与自动备份</div><div class="card-b">
+        <div class="field"><label>自动备份</label><span class="pill ${sp.enabled ? 'on' : ''}">${sp.enabled ? '已开启' : '未开启'}</span></div>
+        <div class="field"><label>已存快照</label><span>${sp.count || 0} 份</span></div>
+        <div class="field"><label>最近快照</label><span class="hint">${lastB}</span></div>
+        <div class="field"><label>数据占用</label><span class="hint">${fmtBytes(stats.storageBytes)}</span></div>
+        <button class="btn primary" id="ovBackup" style="margin-top:6px">前往备份 / 迁移</button>
+      </div></div>
+      <div class="card"><div class="card-h">快速操作</div><div class="card-b" style="display:flex;flex-direction:column;gap:10px">
+        <button class="btn" id="ovCollect">🔍 一键采集本机资源</button>
+        <button class="btn" id="ovExport">📤 共享 / 导出</button>
+        <button class="btn" id="ovSync">🔄 网络同步</button>
+      </div></div>
+    </div>`;
+  $('#ovBackup').onclick = () => navTo('backup');
+  $('#ovExport').onclick = () => navTo('export');
+  $('#ovSync').onclick = () => navTo('sync');
+  $('#ovCollect').onclick = () => $('#collectBtn').click();
+}
+
 /* ---------- 导航 ---------- */
 const PAGES = {
+  overview: renderOverview,
   providers: () => renderCollection('providers'),
   prompts: () => renderCollection('prompts'),
   mcpservers: () => renderCollection('mcpservers'),
@@ -839,6 +891,7 @@ function navTo(key) {
 }
 function buildNav() {
   const items = [
+    { k: 'overview', label: '概览', icon: '🏠' },
     { k: 'providers', label: 'API 端点', icon: '🔌' },
     { k: 'prompts', label: '提示词', icon: '💬' },
     { k: 'mcpservers', label: 'MCP 服务器', icon: '🧩' },
@@ -993,7 +1046,7 @@ function boot() {
   initPalette();
   renderVault();
   renderDataDir();
-  navTo('profiles');
+  navTo('overview');
 }
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', boot, { once: true });
