@@ -3,7 +3,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
-const { COLLECTIONS, DATA_DIR, purgeTombstones, list, get, create, update, remove, rewrite, exportAll, restoreAll, exportProfileBundle, importProfileBundle, importScannedServers, importScannedSkills, importScannedPrompts, collectFromClients, restore, listDeleted } = require('./lib/store');
+const { COLLECTIONS, DATA_DIR, purgeTombstones, list, get, create, update, remove, rewrite, exportAll, restoreAll, exportProfileBundle, importProfileBundle, importScannedServers, importScannedSkills, importScannedPrompts, collectFromClients, restore, purgeTombstone, listDeleted } = require('./lib/store');
 const { probeProvider, checkMcp } = require('./lib/probe');
 const { exportProfile, applyExport, detectClients, scanClientMcp, scanClientSkills, scanClientPrompts, expand, syncRepo } = require('./lib/export');
 const sync = require('./lib/sync');
@@ -358,12 +358,20 @@ const ROUTES = [
       if (!COLLECTIONS.includes(col)) return sendJson(ctx.res, 400, { error: '未知集合' });
       return sendJson(ctx.res, 200, listDeleted(col));
     } },
-  { method: 'POST', test: p => /^\/api\/[\w]+\/[\w-]+\/restore$/.test(p), handler: async (ctx) => {
+  { method: 'POST', test: p => p.split('/').length === 5 && p.endsWith('/restore'), handler: async (ctx) => {
       const parts = ctx.p.split('/');
       const col = parts[2], id = parts[3];
       if (!COLLECTIONS.includes(col)) return sendJson(ctx.res, 400, { error: '未知集合' });
       const r = restore(col, id);
       return sendJson(ctx.res, r ? 200 : 404, r || { error: '不存在' });
+    } },
+
+  { method: 'DELETE', test: p => p.split('/').length === 5 && p.endsWith('/tombstone'), handler: (ctx) => {
+      const parts = ctx.p.split('/');
+      const col = parts[2], id = parts[3];
+      if (!COLLECTIONS.includes(col)) return sendJson(ctx.res, 400, { error: '未知集合' });
+      const r = purgeTombstone(col, id);
+      return sendJson(ctx.res, r ? 200 : 404, r || { error: '墓碑不存在' });
     } },
 
 ];

@@ -15,6 +15,7 @@ const api = {
   create: (c, body) => jfetch('/api/' + c, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   update: (c, id, body) => jfetch(`/api/${c}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   remove: (c, id) => jfetch(`/api/${c}/${id}`, { method: 'DELETE' }),
+  purgeTombstone: (c, id) => jfetch(`/api/${c}/${id}/tombstone`, { method: 'DELETE' }),
   export: id => jfetch('/api/export/' + id),
   apply: id => jfetch(`/api/export/${id}/apply`, { method: 'POST' }),
   postBundle: bundle => jfetch('/api/profiles/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bundle }) }),
@@ -331,7 +332,7 @@ async function renderCollection(col) {
     const syncInfo = (col === 'repos' && it.lastSyncAt) ? `<div class="desc sub">上次同步：${esc(new Date(it.lastSyncAt).toLocaleString())}</div>` : '';
     return `<div class="row">
       <div class="meta"><div class="title">${esc(it[schema.titleField])} ${pill}</div><div class="desc">${esc(desc)}</div>${syncInfo}${tags}</div>
-      <div class="ops">${extra}<button class="btn sm" data-edit="${it.id}">编辑</button><button class="btn sm danger" data-del="${it.id}">删除</button></div>
+      <label class="selwrap"><input type="checkbox" class="sel" data-sel="${it.id}"/></label><div class="ops">${extra}<button class="btn sm" data-edit="${it.id}">编辑</button><button class="btn sm danger" data-del="${it.id}">删除</button></div>
     </div>`;
   };
   // 关键词匹配：名称 / 描述 / 标签
@@ -366,9 +367,14 @@ async function renderCollection(col) {
 
   view.innerHTML = `<div class="section-desc">集中维护 ${schema.label}，可在「共享 / 导出」中一键应用到各客户端。</div>
     <input id="listSearch" class="search" type="text" placeholder="搜索 ${schema.label}…" autocomplete="off"/>
-    <div class="list" id="listBox"></div>`;
+    <div class="batchbar hidden" id="batchBar"><label class="selall"><input type="checkbox" id="selAll"/> 全选</label><span id="selCount" class="hint">已选 0 项</span><span class="spacer"></span><button class="btn sm danger" id="batchDel">删除（移入回收站）</button></div>
+    <div class="list" id="listBox"></div>`
   const listBox = $('#listBox');
-  const paint = (list) => { listBox.innerHTML = list.length ? list.map(rowHtml).join('') : '<div class="empty">无匹配结果</div>'; bindRows(listBox); };
+  const sel = new Set();
+  const paint = (list) => { listBox.innerHTML = list.length ? list.map(rowHtml).join('') : '<div class="empty">无匹配结果</div>'; listBox.querySelectorAll('[data-sel]').forEach(c => { c.checked = sel.has(c.dataset.sel); c.onchange = () => { c.checked ? sel.add(c.dataset.sel) : sel.delete(c.dataset.sel); updateBar(); }; }); bindRows(listBox); updateBar(); };
+  const updateBar = () => { const bar = document.getElementById('batchBar'); if (!bar) return; bar.classList.toggle('hidden', sel.size === 0); document.getElementById('selCount').textContent = '已选 ' + sel.size + ' 项'; const sa = document.getElementById('selAll'); if (sa) sa.checked = items.length > 0 && items.every(it => sel.has(it.id)); };
+  document.getElementById('selAll').onchange = () => { const on = document.getElementById('selAll').checked; items.forEach(it => on ? sel.add(it.id) : sel.delete(it.id)); paint(items); };
+  document.getElementById('batchDel').onclick = () => { if (!sel.size) return; confirmModal('确认批量删除', '将删除选中的 ' + sel.size + ' 项（可在回收站恢复），确定？', async () => { let ok = 0, fail = 0; for (const id of Array.from(sel)) { try { await api.remove(col, id); ok++; } catch (e) { fail++; } } sel.clear(); toast('已删除 ' + ok + (fail ? ('，失败 ' + fail) : '')); renderCollection(col); }); };
   paint(items);
   $('#listSearch').oninput = () => {
     const q = $('#listSearch').value.trim().toLowerCase();
@@ -1030,15 +1036,23 @@ async function renderTrash() {
   }
   const view = $('#view');
   if (!all.length) { view.innerHTML = '<div class="empty">回收站为空。删除的记录先保留为墓碑，可在此恢复（默认 30 天后自动清除）。</div>'; return; }
-  view.innerHTML = '<div class="section-desc">各集合中已删除（墓碑）的记录。恢复后重新出现在原列表，并随同步传播。</div><div class="list">' + all.map(({ col, it }) => {
+  view.innerHTML = '<div class="section-desc">各集合中已删除（墓碑）的记录。恢复后重新出现在原列表，并随同步传播。</div><div class="batchbar hidden" id="trashBar"><label class="selall"><input type="checkbox" id="selAllT"/> 全选</label><span id="trashCount" class="hint">已选 0 项</span><span class="spacer"></span><button class="btn sm" id="batchRes">恢复选中</button><button class="btn sm danger" id="batchPurge">彻底删除</button></div><div class="list">' + all.map(({ col, it }) => {
     const s = SCHEMAS[col];
-    return '<div class="row"><div class="meta"><div class="title">' + esc(it[s.titleField]) + ' <span class="pill">' + esc(s.label) + '</span></div><div class="desc">删除于 ' + esc(new Date(it.updatedAt).toLocaleString()) + '</div></div><div class="ops"><button class="btn sm" data-res="' + col + ':' + it.id + '">恢复</button></div></div>';
+    return '<div class="row"><label class="selwrap"><input type="checkbox" class="sel" data-tsel="' + col + ':' + it.id + '"/></label><div class="meta"><div class="title">' + esc(it[s.titleField]) + ' <span class="pill">' + esc(s.label) + '</span></div><div class="desc">删除于 ' + esc(new Date(it.updatedAt).toLocaleString()) + '</div></div><div class="ops"><button class="btn sm" data-res="' + col + ':' + it.id + '">恢复</button></div></div>';
   }).join('') + '</div>';
   view.querySelectorAll('[data-res]').forEach(b => b.onclick = async () => {
     const sv = b.dataset.res, i = sv.indexOf(':'), col = sv.slice(0, i), id = sv.slice(i + 1);
     const r = await fetch('/api/' + col + '/' + id + '/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(x => x.json()).catch(() => ({}));
     if (r && r.id) { toast('已恢复'); renderTrash(); } else toast('恢复失败：' + (r.error || '未知'));
   });
+  const tsel = new Set();
+  const tbar = document.getElementById('trashBar');
+  const tcount = document.getElementById('trashCount');
+  const updateTBar = () => { if (!tbar) return; tbar.classList.toggle('hidden', tsel.size === 0); if (tcount) tcount.textContent = '已选 ' + tsel.size + ' 项'; const sa = document.getElementById('selAllT'); if (sa) sa.checked = all.length > 0 && all.every(({col,it}) => tsel.has(col + ':' + it.id)); };
+  view.querySelectorAll('[data-tsel]').forEach(c => { c.onchange = () => { const v = c.dataset.tsel; c.checked ? tsel.add(v) : tsel.delete(v); updateTBar(); }; });
+  document.getElementById('selAllT').onchange = () => { const on = document.getElementById('selAllT').checked; all.forEach(({col,it}) => { const v = col + ':' + it.id; on ? tsel.add(v) : tsel.delete(v); }); view.querySelectorAll('[data-tsel]').forEach(c => c.checked = on); updateTBar(); };
+  document.getElementById('batchRes').onclick = async () => { if (!tsel.size) return; confirmModal('确认批量恢复', '将恢复选中的 ' + tsel.size + ' 项，确定？', async () => { let ok = 0; for (const v of Array.from(tsel)) { const i = v.indexOf(':'), col = v.slice(0,i), id = v.slice(i+1); try { const r = await fetch('/api/' + col + '/' + id + '/restore', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' }).then(x=>x.json()); if (r && r.id) ok++; } catch(e){} } tsel.clear(); toast('已恢复 ' + ok); renderTrash(); }); };
+  document.getElementById('batchPurge').onclick = () => { if (!tsel.size) return; confirmModal('确认彻底删除', '将永久删除选中的 ' + tsel.size + ' 项墓碑（不可恢复），确定？', async () => { let ok = 0; for (const v of Array.from(tsel)) { const i = v.indexOf(':'), col = v.slice(0,i), id = v.slice(i+1); try { await api.purgeTombstone(col, id); ok++; } catch(e){} } tsel.clear(); toast('已彻底删除 ' + ok); renderTrash(); }); };
 }
 
 function boot() {

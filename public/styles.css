@@ -229,3 +229,9 @@ button:active:not(:disabled) { filter: brightness(.94); }
 .pal-item { cursor: pointer; }
 .pal-item.pal-active, .pal-item:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); }
 .pal-item .desc { font-size: 12px; }
+.row .meta { flex: 1 1 auto; }
+.selwrap { flex-shrink: 0; display: flex; align-items: center; padding-right: 4px; }
+.batchbar { display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin: 8px 0; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.batchbar .spacer { flex: 1 1 auto; }
+.batchbar.hidden { display: none; }
+.selall { display: flex; align-items: center; gap: 6px; cursor: pointer; }

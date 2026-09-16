@@ -37,6 +37,13 @@ try {
   ok('days=0 被拒绝（避免误清空）', !!store.purgeTombstones(0).error);
   ok('days 非数字被拒绝', !!store.purgeTombstones('abc').error);
 
+  const tp = store.create('clients', { title: 'TMP' });
+  store.remove('clients', tp.id);
+  ok('移除后进入墓碑', store.listDeleted('clients').some((x) => x.id === tp.id));
+  const pr = store.purgeTombstone('clients', tp.id);
+  ok('purgeTombstone 返回被删 id', pr && pr.id === tp.id);
+  ok('彻底删除后墓碑消失', !store.listDeleted('clients').some((x) => x.id === tp.id));
+  ok('对不存在的墓碑返回 null', store.purgeTombstone('clients', 'nope') === null);
   console.log('\n全部通过：' + passed + ' 项');
 } catch (e) {
   console.error('\n测试失败：', e.message);
