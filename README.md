@@ -68,7 +68,7 @@ node server.js
 ```bash
 npm start        # 启动服务（等价 node server.js）
 npm run lint     # 批量语法检查 server.js / lib/*.js / public/app.js
-npm test         # 运行全部隔离测试（11 个套件 / 150+ 用例）
+npm test         # 运行全部隔离测试（12 个套件 / 201 项，见 package.json 的 test 清单）
 ```
 
 - **单测隔离**：`npm test` 通过环境变量 `AI_SHARE_DATA_DIR` 把数据目录指向临时目录，**不会触碰真实 `data/`**，测试结束自动清理。
@@ -135,6 +135,7 @@ ai share/
 | POST | `/api/vault/unlock` | 用主密码解锁（内存中保持密钥，重启需重输） |
 | POST | `/api/vault/lock` | 锁定保险库（清空内存密钥） |
 | GET | `/api/system/info` | 服务端信息：数据目录真实路径、平台、Node 版本、是否打包运行 |
+| GET | `/api/health` | 健康检查：返回 `{ok, name, version, uptime}`，无副作用，供桥接器/守护脚本/容器探针使用 |
 | POST | `/api/paths/validate` | 校验路径是否存在、是否可写（写入客户端配置前自检） |
 | POST | `/api/providers/:id/test` | 连通性测试：用该端点的 baseUrl + key 请求 `/models`，失败再试根路径，返回状态码与耗时 |
 | POST | `/api/mcpservers/:id/check` | MCP 可用性检查：stdio 校验命令文件是否存在（相对命令依赖 PATH 不做静态判断），sse/http 直接探测 URL |
@@ -213,7 +214,7 @@ AI_SHARE_URL=http://127.0.0.1:4737 node mcp-bridge.js   # 端口/地址不同时
 | `aishare_collections` | 列出可用集合 |
 | `aishare_list` | 列出某集合的全部条目 |
 | `aishare_get` | 按 id 取集合中单条资源 |
-| `aishare_search` | 在集合内按关键字搜索（匹配名称 / 描述 / 类型等） |
+| `aishare_search` | 按关键字搜索：不给 `collection` 时跨全部集合搜索，返回 `{collection, item}` 列表；给了则在单集合内过滤 |
 | `aishare_apply_profile` | 把一个「共享配置（方案）」写入其目标客户端配置文件 |
 | `aishare_detect_clients` | 探测本机已安装的 AI 客户端及其配置文件路径 |
 

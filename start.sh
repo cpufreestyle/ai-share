@@ -14,13 +14,13 @@ PORT="${PORT:-4737}"
 
 # --- 检查 Node ---
 if ! command -v node >/dev/null 2>&1; then
-  echo "[ai-share] 未找到 node，请先安装 Node.js >= 16: https://nodejs.org/" >&2
+  echo "[ai-share] 未找到 node，请先安装 Node.js >= 20: https://nodejs.org/" >&2
   exit 1
 fi
 
 NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-if [ "$NODE_MAJOR" -lt 16 ]; then
-  echo "[ai-share] Node 版本过低（当前 $(node --version)），需要 >= 16" >&2
+if [ "$NODE_MAJOR" -lt 20 ]; then
+  echo "[ai-share] Node 版本过低（当前 $(node --version)），需要 >= 20" >&2
   exit 1
 fi
 
