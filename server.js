@@ -199,6 +199,8 @@ const ROUTES = [
       packed: !!process.pkg,
     }) },
 
+  // 健康检查：桥接器/守护脚本/容器探针用，无副作用，不经过 vault
+  { method: 'GET', test: p => p === '/api/health', handler: (ctx) => sendJson(ctx.res, 200, { ok: true, name: 'ai-share', version: require('./package.json').version, uptime: Math.round(process.uptime()) }) },
   // 概览统计：供首页仪表盘展示各集合数量、数据占用、快照状态
   { method: 'GET', test: p => p === '/api/system/stats', handler: (ctx) => {
       const all = exportAll();
@@ -383,7 +385,11 @@ async function handleCrud(req, res, p) {
   const col = m[1], id = m[2];
   if (!COLLECTIONS.includes(col)) { send(res, 400, { error: '未知集合' }); return true; }
   if (req.method === 'GET') {
-    send(res, 200, id ? (get(col, id) || {}) : list(col));
+    if (!id) { send(res, 200, list(col)); return true; }
+    const it = get(col, id);
+    if (it) { send(res, 200, it); return true; }
+    send(res, 404, { error: '不存在' });
+    return true;
   } else if (req.method === 'POST') {
     const body = await readBody(req);
     send(res, 201, create(col, body));

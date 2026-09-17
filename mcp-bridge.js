@@ -89,8 +89,8 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: { collection: { type: 'string', enum: COLLECTIONS } }, required: ['collection'] } },
   { name: 'aishare_get', description: '按 id 取集合中单条资源。',
     inputSchema: { type: 'object', properties: { collection: { type: 'string', enum: COLLECTIONS }, id: { type: 'string' } }, required: ['collection', 'id'] } },
-  { name: 'aishare_search', description: '在集合内按关键字搜索 (匹配 name/title/description/type)。',
-    inputSchema: { type: 'object', properties: { collection: { type: 'string', enum: COLLECTIONS }, q: { type: 'string' } }, required: ['collection', 'q'] } },
+  { name: 'aishare_search', description: '按关键字搜索：不给 collection 时跨全部集合搜索，返回 [{collection, item}]；给了则在单集合内过滤。',
+    inputSchema: { type: 'object', properties: { collection: { type: 'string', enum: COLLECTIONS }, q: { type: 'string' } }, required: ['q'] } },
   { name: 'aishare_apply_profile', description: '把一个「共享配置(方案)」写入其目标客户端配置文件。',
     inputSchema: { type: 'object', properties: { profileId: { type: 'string' } }, required: ['profileId'] } },
   { name: 'aishare_detect_clients', description: '探测本机已安装的 AI 客户端及其配置文件路径。',
@@ -110,8 +110,17 @@ async function callTool(name, args = {}) {
       return json(item);
     }
     case 'aishare_search': {
-      const items = searchFilter(asArray(await api('GET', '/api/' + args.collection)), args.q);
-      return json(items);
+      const q = String(args.q || '');
+      if (args.collection) {
+        const items = searchFilter(asArray(await api('GET', '/api/' + args.collection)), q);
+        return json(items);
+      }
+      const out = [];
+      for (const col of COLLECTIONS) {
+        const items = searchFilter(asArray(await api('GET', '/api/' + col)), q);
+        for (const it of items) out.push({ collection: col, item: it });
+      }
+      return json(out);
     }
     case 'aishare_apply_profile': {
       const r = await api('POST', `/api/export/${encodeURIComponent(args.profileId)}/apply`, {});

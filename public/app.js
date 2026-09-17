@@ -209,7 +209,8 @@ function fieldHtml(f, val, typeVal) {
   } else if (f.type === 'paths') {
     inner = `<textarea id="f_${f.key}" rows="3" placeholder="每行一个路径">${esc(Array.isArray(v) ? v.join('\n') : v)}</textarea>`;
   } else if (f.type === 'password') {
-    inner = `<input id="f_${f.key}" type="password" value="${esc(v)}" placeholder="••••••"/>`;
+    inner = `<input id="f_${f.key}" type="password" value="${esc(v)}" placeholder="•••••" autocomplete="off"/>
+      <div class="pwops"><button type="button" class="btn sm" data-pwtoggle="${f.key}">显示</button><button type="button" class="btn sm" data-pwcopy="${f.key}">复制</button></div>`;
   } else {
     inner = `<input id="f_${f.key}" value="${esc(v)}"/>`;
   }
@@ -258,6 +259,20 @@ function openForm(col, item, onSave) {
   };
   const render = (typeVal) => {
     body.innerHTML = schema.fields.map(f => fieldHtml(f, cur[f.key], typeVal)).join('');
+    // 密钥字段：显示/隐藏切换 + 一键复制（放在 render 内，类型切换重渲染后仍有效）
+    body.querySelectorAll('[data-pwtoggle]').forEach(b => b.onclick = () => {
+      const inp = $('#f_' + b.dataset.pwtoggle); if (!inp) return;
+      const show = inp.type === 'password';
+      inp.type = show ? 'text' : 'password';
+      b.textContent = show ? '隐藏' : '显示';
+    });
+    body.querySelectorAll('[data-pwcopy]').forEach(b => b.onclick = () => {
+      const inp = $('#f_' + b.dataset.pwcopy); if (!inp) return;
+      if (!inp.value) return toast('内容为空，无需复制');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(inp.value).then(() => toast('已复制'), () => toast('复制失败，请手动选择'));
+      } else { inp.select(); toast('已全选，请按 Ctrl+C 复制'); }
+    });
     const typeSel = $('#f_type');
     if (typeSel) typeSel.onchange = () => { render(typeSel.value); addDetectBtn(); };
     addDetectBtn();

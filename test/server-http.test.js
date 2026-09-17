@@ -44,6 +44,12 @@ server.listen(0, '127.0.0.1', async () => {
     store.create('providers', { name: 'stat-probe', baseUrl: 'https://x.test' });
     r = await request(port, '/api/system/stats');
     ok('概览统计接口 200 且 counts.providers>=1（验证取的是 exportAll.collections）', r.status === 200 && (() => { try { const s = JSON.parse(r.body); return s.counts && s.counts.providers >= 1 && typeof s.counts.total === 'number' && typeof s.storageBytes === 'number' && !!s.snapshots; } catch (_) { return false; } })());
+
+    r = await request(port, '/api/health');
+    ok('健康检查接口 200 且返回 ok/version/uptime', r.status === 200 && (() => { try { const h = JSON.parse(r.body); return h.ok === true && typeof h.version === 'string' && typeof h.uptime === 'number'; } catch (_) { return false; } })());
+
+    r = await request(port, '/api/providers/nope-missing');
+    ok('GET 单条不存在返回 404（曾返回 200 空对象）', r.status === 404);
     const tp = store.create('clients', { title: 'tomb' });
     store.remove('clients', tp.id);
     r = await request(port, '/api/clients/' + tp.id + '/tombstone', {}, 'DELETE');
