@@ -44,6 +44,14 @@ try {
   ok('purgeTombstone 返回被删 id', pr && pr.id === tp.id);
   ok('彻底删除后墓碑消失', !store.listDeleted('clients').some((x) => x.id === tp.id));
   ok('对不存在的墓碑返回 null', store.purgeTombstone('clients', 'nope') === null);
+
+  // 回归：墓碑曾只存空壳，恢复丢全部字段（且同步会把空壳传播到对端）
+  const full = store.create('providers', { name: 'FULLROW', baseUrl: 'https://f.test', notes: 'keepme' });
+  store.remove('providers', full.id);
+  ok('删除后回收站可见原字段', store.listDeleted('providers').some((x) => x.id === full.id && x.name === 'FULLROW'));
+  const back = store.restore('providers', full.id);
+  ok('恢复后字段完整不丢失', back && back.name === 'FULLROW' && back.baseUrl === 'https://f.test' && back.notes === 'keepme');
+  ok('恢复后重回正常列表', store.list('providers').some((x) => x.id === full.id));
   console.log('\n全部通过：' + passed + ' 项');
 } catch (e) {
   console.error('\n测试失败：', e.message);
