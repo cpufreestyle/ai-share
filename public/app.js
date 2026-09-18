@@ -362,6 +362,14 @@ async function renderCollection(col, prefetched) {
   }
   if (!items.length) { view.innerHTML = `<div class="empty">暂无数据，点击右上角「新建」添加。</div>`; return; }
 
+  // 客户端集合：补充真实探测出来的「是否已安装 / 是否已有配置文件」状态，
+  // 避免用户以为「登记了就等于装好了」（探测只读本地文件，不产生副作用）。
+  let clientDet = null;
+  if (col === 'clients') {
+    try { clientDet = await fetch('/api/detect/clients').then(r => r.json()); } catch (e) { clientDet = null; }
+  }
+  const detOf = (t) => (clientDet || []).find(d => d.type === t) || null;
+
   const rowHtml = it => {
     let desc = schema.descField === '_desc'
       ? (col === 'repos'
@@ -370,12 +378,15 @@ async function renderCollection(col, prefetched) {
       : it[schema.descField] || '';
     const tags = schema.tagsField ? (it[schema.tagsField] || []).map(t => `<span class="tag">${esc(t)}</span>`).join('') : '';
     const pill = ('enabled' in it) ? `<span class="pill ${it.enabled ? 'on' : 'off'}">${it.enabled ? '启用' : '停用'}</span>` : '';
+    const det = col === 'clients' ? detOf(it.type) : null;
+    const installPill = det ? `<span class="pill ${det.installed ? 'on' : 'off'}">${det.installed ? '已安装' : '未安装'}</span>` : '';
+    const cfgPill = (det && det.exists) ? '<span class="pill">已有配置文件</span>' : '';
     const extra = (col === 'repos' ? `<button class="btn sm" data-sync="${it.id}">同步</button>` : '')
       + (col === 'providers' ? `<button class="btn sm" data-test="${it.id}">测试</button>` : '')
       + (col === 'mcpservers' ? `<button class="btn sm" data-check="${it.id}">检查</button>` : '');
     const syncInfo = (col === 'repos' && it.lastSyncAt) ? `<div class="desc sub">上次同步：${esc(new Date(it.lastSyncAt).toLocaleString())}</div>` : '';
     return `<div class="row">
-      <div class="meta"><div class="title">${esc(it[schema.titleField])} ${pill}</div><div class="desc">${esc(desc)}</div>${syncInfo}${tags}</div>
+      <div class="meta"><div class="title">${esc(it[schema.titleField])} ${pill}${installPill}${cfgPill}</div><div class="desc">${esc(desc)}</div>${syncInfo}${tags}</div>
       <label class="selwrap"><input type="checkbox" class="sel" data-sel="${it.id}"/></label><div class="ops">${extra}<button class="btn sm" data-edit="${it.id}">编辑</button><button class="btn sm danger" data-del="${it.id}">删除</button></div>
     </div>`;
   };
