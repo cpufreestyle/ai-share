@@ -22,7 +22,10 @@
 - **密钥重复加密体检 / 修复**：新增 `store.repairSecrets` 与 `POST /api/maintenance/repair-secrets`（默认只扫描，`body.apply=true` 才落盘），逐层解开历史多层密文还原成单层、报告可省下的体积，密钥不匹配的记录一律跳过不破坏数据；界面在「备份 / 迁移」页新增「数据体检」卡片。配合根因修复，真实数据里某条 `apiKey` 从 3 MB 回到几十字节。
 - **列表接口不再回传密钥明文**：`GET /api/:collection` 改用 `store.listPublic`，密钥字段以 `__SET__` 占位（编辑表单走 `GET /api/:collection/:id` 仍取明文）。真实数据里单个集合的列表响应从 **1.77 MB 降到 463 字节**，MCP 桥的 `aishare_list` / `aishare_search` 也不会再把密钥交给 Agent。
 - **客户端安装状态提示**：客户端列表新增「已安装 / 未安装」与「已有配置文件」徽标（来自实际探测），避免把「已登记」误当成「已装好」。
-- **测试护栏**：新增 10 个测试套件（原子写、墓碑、防跨站、客户端配置原子写、同步配置、同步服务端存储、HTTP 集成、连通性探测、跨进程写锁、本地自动备份），`npm test` 现跑 13 个套件 / 281 用例。其中的并发用例会拉起 4 个子进程同时对同一集合做读改写，关掉写锁后该用例必定失败，可反向验证锁确实生效。
+- **写入计划（plan / diff）**：参照 `terraform plan` / `chezmoi diff`，新增 `POST /api/export/:id/plan` 与「共享 / 导出」页的「预览差异」按钮——先看方案将向每个客户端写入什么（新增 / 修改 / 不变 / 保留方案外条目 / 非法 JSON 跳过），再决定是否写入；密钥脱敏后展示，全程不落盘。
+- **明文密钥扫描**：参照 `gitleaks` / `trufflehog`，新增 `lib/secretscan.js` 与 `POST /api/security/scan-secrets`，扫描客户端配置 / 技能 / 提示词文件里的疑似明文密钥并标注「是否已被本系统收口」；界面入口在「Agent 客户端」页，结果只带脱敏片段。
+- **命令行入口 `ai-share`**：新增零依赖 `bin/ai-share.js`（`status` / `list` / `get` / `search` / `profiles` / `plan` / `apply` / `scan-secrets` / `trash` / `repair-secrets` / `env`），服务未启动自动拉起，`-j` 输出 JSON 便于脚本与 Agent 使用。
+- **测试护栏**：新增 10 个测试套件（原子写、墓碑、防跨站、客户端配置原子写、同步配置、同步服务端存储、HTTP 集成、连通性探测、跨进程写锁、本地自动备份），`npm test` 现跑 15 个套件 / 330 用例。其中的并发用例会拉起 4 个子进程同时对同一集合做读改写，关掉写锁后该用例必定失败，可反向验证锁确实生效。
 - **批量操作**：集合列表支持多选（`Shift` 点击整段选中，「全选」只作用于当前筛选结果），可一次删除入回收站、一次启用/停用（仅含 `enabled` 字段的集合显示该组按钮）；回收站支持多选批量恢复 / 批量彻底删除，以及一键清空。新增 `POST /api/:collection/bulk-delete`、`POST /api/:collection/bulk-enabled`、`POST /api/trash/bulk-restore`、`POST /api/trash/bulk-purge`、`POST /api/trash/purge-all` 与 `DELETE /api/:collection/:id/tombstone`；批量操作在服务端**一次加锁**完成，替代前端 N 次串行请求（单次上限 500 条）。
 - **列表接口 304 协商缓存**：`GET /api/:collection` 现在返回内容哈希 `ETag`（`Cache-Control: no-cache`），浏览器重复拉取同一集合时命中 304、不再传输与解析整份 JSON；内容一变 ETag 立即变化，不会吃到旧数据。
 - **前端列表 SWR 缓存**：二次进入同一集合先用内存缓存渲染（不再闪「加载中…」），随后后台静默校验，数据有变化才重绘，因而保留用户的勾选与滚动位置；增删改、导入、仓库同步、回收站恢复/彻底删除都会先失效对应缓存。

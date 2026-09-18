@@ -68,7 +68,7 @@ node server.js
 ```bash
 npm start        # 启动服务（等价 node server.js）
 npm run lint     # 批量语法检查 server.js / lib/*.js / public/app.js
-npm test         # 运行全部隔离测试（13 个套件 / 281 项，见 package.json 的 test 清单）
+npm test         # 运行全部隔离测试（15 个套件 / 330 项，见 package.json 的 test 清单）
 ```
 
 - **单测隔离**：`npm test` 通过环境变量 `AI_SHARE_DATA_DIR` 把数据目录指向临时目录，**不会触碰真实 `data/`**，测试结束自动清理。
@@ -149,6 +149,8 @@ ai share/
 | POST | `/api/trash/purge-all` | 一键清空回收站（清掉全部集合的墓碑），返回各集合计数 |
 | POST | `/api/maintenance/purge-tombstones` | 清理 N 天前的墓碑记录（body.days，默认 30，最小 1） |
 | POST | `/api/maintenance/repair-secrets` | 密钥重复加密体检：默认只扫描并报告，`body.apply=true` 才落盘修复 |
+| POST | `/api/export/:id/plan` | **写入计划**：计算方案将写入各客户端的内容与差异，不落盘（密钥脱敏） |
+| POST | `/api/security/scan-secrets` | **明文密钥扫描**：扫各客户端配置 / 技能 / 提示词文件里的疑似密钥（只读） |
 
 ## 进阶能力
 
@@ -165,6 +167,9 @@ ai share/
 - **密钥加密存储**：`providers.apiKey` 在落盘时以 AES-256-GCM 加密（密钥存于 `data/.key`，已加入 `.gitignore`）。磁盘上是密文，应用内读取/编辑时自动解密。备份文件中密钥为明文以便迁移，请妥善保管。
 - **列表接口不回传密钥明文**：`GET /api/:collection` 走 `store.listPublic`，密钥字段以 `__SET__` 占位，明文只在 `GET /api/:collection/:id`（编辑表单用）返回。既省掉一次解密，也让 MCP 桥的 `aishare_list` / `aishare_search` 不会把密钥交给 Agent。
 - **密钥重复加密体检 / 修复**：历史上 `seal` 不幂等，`update` / `remove` / `restore` / 同步 / 备份导入等路径会给已有密文再套一层，每保存一次字段就膨胀一截（实测某条 `apiKey` 被套 35 层、涨到 3 MB）。现已在 `crypto.isSealed` 处修掉根因，并提供 `POST /api/maintenance/repair-secrets` 与「备份 / 迁移 → 数据体检」卡片把历史多层密文还原成单层（默认只扫描，修复前建议先做快照）。
+- **写入计划（plan / diff）**：参照 `terraform plan` 与 `chezmoi diff` 的做法，「共享 / 导出」页每张卡新增「预览差异」按钮，先算出方案将向每个客户端写入什么——新增 / 修改 / 不变，以及**方案外已有的 MCP 会被保留**（apply 是合并写）——确认后再写。非法 JSON（JSONC）目标会明确标为「将跳过」，密钥一律脱敏后再展示。
+- **明文密钥扫描**：参照 `gitleaks` / `trufflehog` 的特征思路，扫描已登记客户端的配置文件、技能与提示词目录里的疑似明文密钥（OpenAI / Anthropic / Google / AWS / GitHub / GitLab / Slack / Stripe / HuggingFace / JWT / 硬编码 Bearer / 私钥块 / `apikey` 字段），并标注该值是否已被本系统收口（等于某个已登记的 API Key）。入口在「Agent 客户端」页右上角，也可用 CLI `ai-share scan-secrets`。只读，结果只带脱敏片段。
+- **命令行入口 `ai-share`**：参照 `llm` / `aichat` / `kubectx` 的本地 CLI 习惯，零依赖的 `bin/ai-share.js` 提供 `status` / `list` / `get` / `search` / `profiles` / `plan` / `apply` / `scan-secrets` / `trash` / `repair-secrets` / `env` 子命令（`-j` 输出 JSON 便于脚本消费），服务未启动会自动拉起。`npm link` 后可直接敲 `ai-share …`。
 - **客户端路径自动探测**：在「Agent 客户端」编辑表单中点击「自动探测」，会**实际扫描**该客户端是否已安装（检查常见可执行文件位置，Windows 检查安装目录，macOS 检查 `/Applications`，Linux 检查常见 bin 路径）以及是否已有配置文件，并自动填回对应的默认配置文件路径（含 `{APPDATA}`/`{USERPROFILE}` 占位符）。占位符跨平台可用：Windows 展开为对应系统目录，macOS 的 `{APPDATA}`/`{LOCALAPPDATA}` 映射到 `~/Library/Application Support`，Linux 遵循 XDG 惯例（`~/.config` / `~/.local/share`）。客户端列表还会显示实测出来的「已安装 / 未安装」与「已有配置文件」徽标，避免把「已登记」误当成「已装好」。
 - **从客户端反向导入 MCP 配置**：在「MCP 服务器」页点击「从客户端导入」，选择某个已安装客户端，工具会**直接读取该客户端电脑上的真实配置文件**（如 `claude_desktop_config.json`、`.cursor/mcp.json`），解析其中的 `mcpServers` 并清单预览、可勾选，确认后一键搬入本系统统一管理。同名服务器自动更新、不同名则新增，方便把散落在各客户端的 MCP 配置集中收口。
 - **从客户端汇总 Skill 到仓库**：在「Skill 仓库」页点击「从客户端导入」，选择客户端后工具会**逐个扫描其本地 skill 目录**（如 `~/.codebuddy/skills`、`~/.claude/skills`），解析每个 skill 文件夹中的 `SKILL.md`（读取 `name` / `description` frontmatter），预览并勾选后一键登记进「Skill 仓库」（以本地仓库形式，路径即 skill 文件夹）。按文件夹路径合并，避免重复。
