@@ -68,11 +68,11 @@ node server.js
 ```bash
 npm start        # 启动服务（等价 node server.js）
 npm run lint     # 批量语法检查 server.js / lib/*.js / public/app.js
-npm test         # 运行全部隔离测试（12 个套件 / 255 项，见 package.json 的 test 清单）
+npm test         # 运行全部隔离测试（13 个套件 / 281 项，见 package.json 的 test 清单）
 ```
 
 - **单测隔离**：`npm test` 通过环境变量 `AI_SHARE_DATA_DIR` 把数据目录指向临时目录，**不会触碰真实 `data/`**，测试结束自动清理。
-- **覆盖范围**：扫描（Skill / 提示词 / MCP）、内容指纹去重、大文件跳过、客户端登记与「一键采集」端到端；多进程并发写入与跨进程写锁；存储原子写与损坏回滚、墓碑清理、本地防跨站调用、客户端配置文件原子写入、同步配置读写、同步服务端存储安全、Provider / MCP 连通性探测，以及真实起服务的 HTTP 集成用例（跨站 403、非 JSON 415、静态资源 gzip、列表 ETag/304、批量操作路由）。
+- **覆盖范围**：扫描（Skill / 提示词 / MCP）、内容指纹去重、大文件跳过、客户端登记与「一键采集」端到端；多进程并发写入与跨进程写锁；存储原子写与损坏回滚、密钥加密落地与多层密文修复、墓碑清理、本地防跨站调用、客户端配置文件原子写入、同步配置读写、同步服务端存储安全、Provider / MCP 连通性探测，以及真实起服务的 HTTP 集成用例（跨站 403、非 JSON 415、静态资源 gzip、列表 ETag/304、批量操作路由）。
 - **注意**：`test` 脚本是**显式罗列**的用例清单而非 glob，新增测试文件后必须手动把它加进 `package.json` 的 `test` 脚本，否则本地与 CI 都不会执行它。
 - **CI**：`.github/workflows/ci.yml` 在 `push` / `pull_request` 时自动运行 `npm run lint` 与 `npm test`（Ubuntu + Windows 双平台矩阵，Node 20），跨平台差异（路径、大小写敏感度、换行）由同一套用例覆盖。
 - **发布**：`.github/workflows/release.yml` 在推送 `v*` tag 时，于 Windows / Linux / macOS(Intel + ARM) 四个原生 runner 上用 [`@yao-pkg/pkg`](https://github.com/yao-pkg/pkg) 分别打包，逐个做启动冒烟测试后自动上传到 GitHub Release。也可在 Actions 页手动触发（`workflow_dispatch`）。
@@ -148,6 +148,7 @@ ai share/
 | POST | `/api/trash/bulk-purge` | 回收站批量彻底删除（body.items = `[{col,id}]`） |
 | POST | `/api/trash/purge-all` | 一键清空回收站（清掉全部集合的墓碑），返回各集合计数 |
 | POST | `/api/maintenance/purge-tombstones` | 清理 N 天前的墓碑记录（body.days，默认 30，最小 1） |
+| POST | `/api/maintenance/repair-secrets` | 密钥重复加密体检：默认只扫描并报告，`body.apply=true` 才落盘修复 |
 
 ## 进阶能力
 
@@ -162,6 +163,8 @@ ai share/
 - **批量操作**：集合列表支持多选（`Shift` 点击整段选中，「全选」只作用于当前筛选结果），可一次删除入回收站、一次启用/停用（仅含 `enabled` 字段的集合显示该组按钮）；回收站支持多选批量恢复 / 批量彻底删除与一键清空。批量请求在服务端**一次加锁**完成，替代前端 N 次串行调用（单次上限 500 条）。
 - **本地自动备份与一键回滚**：在「备份 / 迁移」页可开启定时快照（默认每 12 小时、保留 10 份），也能随时手动快照。误删、改坏配置或导入错备份后，可在快照列表里回滚到任一时间点——回滚前会自动存一份当前状态作为「安全快照」，因此回滚本身也是可逆的（`lib/autobackup.js`）。快照是明文，落在数据目录下的 `backups/`，请勿随仓库分发。
 - **密钥加密存储**：`providers.apiKey` 在落盘时以 AES-256-GCM 加密（密钥存于 `data/.key`，已加入 `.gitignore`）。磁盘上是密文，应用内读取/编辑时自动解密。备份文件中密钥为明文以便迁移，请妥善保管。
+- **列表接口不回传密钥明文**：`GET /api/:collection` 走 `store.listPublic`，密钥字段以 `__SET__` 占位，明文只在 `GET /api/:collection/:id`（编辑表单用）返回。既省掉一次解密，也让 MCP 桥的 `aishare_list` / `aishare_search` 不会把密钥交给 Agent。
+- **密钥重复加密体检 / 修复**：历史上 `seal` 不幂等，`update` / `remove` / `restore` / 同步 / 备份导入等路径会给已有密文再套一层，每保存一次字段就膨胀一截（实测某条 `apiKey` 被套 35 层、涨到 3 MB）。现已在 `crypto.isSealed` 处修掉根因，并提供 `POST /api/maintenance/repair-secrets` 与「备份 / 迁移 → 数据体检」卡片把历史多层密文还原成单层（默认只扫描，修复前建议先做快照）。
 - **客户端路径自动探测**：在「Agent 客户端」编辑表单中点击「自动探测」，会**实际扫描**该客户端是否已安装（检查常见可执行文件位置，Windows 检查安装目录，macOS 检查 `/Applications`，Linux 检查常见 bin 路径）以及是否已有配置文件，并自动填回对应的默认配置文件路径（含 `{APPDATA}`/`{USERPROFILE}` 占位符）。占位符跨平台可用：Windows 展开为对应系统目录，macOS 的 `{APPDATA}`/`{LOCALAPPDATA}` 映射到 `~/Library/Application Support`，Linux 遵循 XDG 惯例（`~/.config` / `~/.local/share`）。
 - **从客户端反向导入 MCP 配置**：在「MCP 服务器」页点击「从客户端导入」，选择某个已安装客户端，工具会**直接读取该客户端电脑上的真实配置文件**（如 `claude_desktop_config.json`、`.cursor/mcp.json`），解析其中的 `mcpServers` 并清单预览、可勾选，确认后一键搬入本系统统一管理。同名服务器自动更新、不同名则新增，方便把散落在各客户端的 MCP 配置集中收口。
 - **从客户端汇总 Skill 到仓库**：在「Skill 仓库」页点击「从客户端导入」，选择客户端后工具会**逐个扫描其本地 skill 目录**（如 `~/.codebuddy/skills`、`~/.claude/skills`），解析每个 skill 文件夹中的 `SKILL.md`（读取 `name` / `description` frontmatter），预览并勾选后一键登记进「Skill 仓库」（以本地仓库形式，路径即 skill 文件夹）。按文件夹路径合并，避免重复。
