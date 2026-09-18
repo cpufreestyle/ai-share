@@ -53,4 +53,37 @@ writeJsonAtomic(f, { v: 2 });
 ok('writeJsonAtomic 覆盖成功', JSON.parse(fs.readFileSync(f, 'utf8')).v === 2);
 ok('writeJsonAtomic 覆盖前留 .bak', JSON.parse(fs.readFileSync(f + '.bak', 'utf8')).v === 1);
 
+
+// 5) planExport：参照 terraform plan —— 只计算差异、绝不落盘、密钥一律脱敏
+const { planExport } = require('../lib/export');
+const beforeText = fs.readFileSync(target, 'utf8');
+const plan = planExport(profile.id);
+ok('plan 返回 ok 且带汇总', plan.ok === true && plan.summary.targets === 1);
+ok('plan 不改动目标文件', fs.readFileSync(target, 'utf8') === beforeText);
+ok('已应用过的方案 plan 为不变（same）', plan.targets[0].mcpServers.same.includes('ai-share') && plan.targets[0].mcpServers.add.length === 0);
+ok('方案外已有条目标记为保留', plan.targets[0].mcpServers.kept.includes('keep'));
+
+store.update('mcpservers', srv.id, { command: 'node2' });
+const plan2 = planExport(profile.id);
+ok('上游改动被识别为 modified', plan2.targets[0].mcpServers.change.some((c) => c.name === 'ai-share'));
+ok('modified 带脱敏前值', !!plan2.targets[0].mcpServers.change[0].before);
+
+const prov = store.create('providers', { name: 'PK', baseUrl: 'https://pk', apiKey: 'sk-plain-secret-1234567890' });
+const prof3 = store.create('profiles', { name: 'P3', clientIds: [client.id], mcpServerIds: [], providerId: prov.id, injectEnv: true });
+const plan3 = planExport(prof3.id);
+ok('plan 识别 env 新增', plan3.targets[0].env.add.some((e) => e.key === 'AI_API_KEY'));
+ok('plan 不回传明文密钥', !JSON.stringify(plan3).includes('sk-plain-secret-1234567890'));
+ok('plan 的密钥值已脱敏', JSON.stringify(plan3).indexOf('***') !== -1);
+
+fs.writeFileSync(target, '{ bad json');
+const plan4 = planExport(profile.id);
+ok('非法 JSON 目标被标记 invalid-json', plan4.targets[0].status === 'invalid-json');
+ok('非法 JSON 目标不计入告警且不给出预览', plan4.summary.warnings >= 1 && plan4.targets[0].preview === null);
+fs.writeFileSync(target, JSON.stringify({ mcpServers: { keep: { command: 'a' } } }, null, 2));
+
+fs.rmSync(target2, { force: true }); // 前面用例已创建过该文件，删掉才能走到 new-file 分支
+const plan5 = planExport(profile2.id);
+ok('目标不存在时标记 new-file 并列为新增', plan5.targets[0].status === 'new-file' && plan5.targets[0].mcpServers.add.length === 1);
+ok('planExport 对不存在的方案返回 ok:false', planExport('nope').ok === false);
+
 console.log('全部通过：' + passed + ' 项');

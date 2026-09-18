@@ -6,7 +6,8 @@ const zlib = require('zlib');
 const crypto = require('crypto');
 const { COLLECTIONS, DATA_DIR, purgeTombstones, list, get, create, update, remove, rewrite, exportAll, restoreAll, exportProfileBundle, importProfileBundle, importScannedServers, importScannedSkills, importScannedPrompts, collectFromClients, restore, purgeTombstone, listDeleted, removeMany, restoreMany, purgeMany, setEnabledMany, purgeAllTombstones, listPublic, repairSecrets } = require('./lib/store');
 const { probeProvider, checkMcp } = require('./lib/probe');
-const { exportProfile, applyExport, detectClients, scanClientMcp, scanClientSkills, scanClientPrompts, expand, syncRepo } = require('./lib/export');
+const { exportProfile, applyExport, planExport, detectClients, scanClientMcp, scanClientSkills, scanClientPrompts, expand, syncRepo } = require('./lib/export');
+const { scanSecrets } = require('./lib/secretscan');
 const sync = require('./lib/sync');
 const autobackup = require('./lib/autobackup');
 const vault = require('./lib/crypto');
@@ -117,6 +118,94 @@ const ROUTES = [
   { method: 'POST', test: p => /^\/api\/export\/([\w-]+)\/apply$/.test(p), handler: (ctx) => {
       const m = ctx.p.match(/^\/api\/export\/([\w-]+)\/apply$/);
       return sendJson(ctx.res, 200, applyExport(m[1]));
+    } },
+  // 写入计划（不落盘）：参照 terraform plan，先看差异再决定要不要 apply
+  { method: 'POST', test: p => /^\/api\/export\/([\w-]+)\/plan$/.test(p), handler: (ctx) => {
+      const m = ctx.p.match(/^\/api\/export\/([\w-]+)\/plan$/);
+      const r = planExport(m[1]);
+      return sendJson(ctx.res, r && r.ok ? 200 : 404, r || { ok: false, error: 'profile 不存在' });
+    } },
+  // 明文密钥扫描（只读，参照 gitleaks / trufflehog 的检测思路）
+  { method: 'POST', test: p => p === '/api/security/scan-secrets', handler: async (ctx) => {
+      const body = (await readBody(ctx.req)) || {};
+      return sendJson(ctx.res, 200, scanSecrets(body));
+    } },
+  // 写入计划（不落盘）：参照 terraform plan，先看差异再决定要不要 apply
+  { method: 'POST', test: p => /^\/api\/export\/([\w-]+)\/plan$/.test(p), handler: (ctx) => {
+      const m = ctx.p.match(/^\/api\/export\/([\w-]+)\/plan$/);
+      const r = planExport(m[1]);
+      return sendJson(ctx.res, r && r.ok ? 200 : 404, r || { ok: false, error: 'profile 不存在' });
+    } },
+  // 明文密钥扫描（只读，参照 gitleaks / trufflehog 的检测思路）
+  { method: 'POST', test: p => p === '/api/security/scan-secrets', handler: async (ctx) => {
+      const body = (await readBody(ctx.req)) || {};
+      return sendJson(ctx.res, 200, scanSecrets(body));
+    } },
+  // 写入计划（不落盘）：参照 terraform plan，先看差异再决定要不要 apply
+  { method: 'POST', test: p => /^\/api\/export\/([\w-]+)\/plan$/.test(p), handler: (ctx) => {
+      const m = ctx.p.match(/^\/api\/export\/([\w-]+)\/plan$/);
+      const r = planExport(m[1]);
+      return sendJson(ctx.res, r && r.ok ? 200 : 404, r || { ok: false, error: 'profile 不存在' });
+    } },
+  // 明文密钥扫描（只读，参照 gitleaks / trufflehog 的检测思路）
+  { method: 'POST', test: p => p === '/api/security/scan-secrets', handler: async (ctx) => {
+      const body = (await readBody(ctx.req)) || {};
+      return sendJson(ctx.res, 200, scanSecrets(body));
+    } },
+  // 写入计划（不落盘）：参照 terraform plan，先看差异再决定要不要 apply
+  { method: 'POST', test: p => /^\/api\/export\/([\w-]+)\/plan$/.test(p), handler: (ctx) => {
+      const m = ctx.p.match(/^\/api\/export\/([\w-]+)\/plan$/);
+      const r = planExport(m[1]);
+      return sendJson(ctx.res, r && r.ok ? 200 : 404, r || { ok: false, error: 'profile 不存在' });
+    } },
+  // 明文密钥扫描（只读，参照 gitleaks / trufflehog 的检测思路）
+  { method: 'POST', test: p => p === '/api/security/scan-secrets', handler: async (ctx) => {
+      const body = (await readBody(ctx.req)) || {};
+      return sendJson(ctx.res, 200, scanSecrets(body));
+    } },
+  // 写入计划（不落盘）：参照 terraform plan，先看差异再决定要不要 apply
+  { method: 'POST', test: p => /^\/api\/export\/([\w-]+)\/plan$/.test(p), handler: (ctx) => {
+      const m = ctx.p.match(/^\/api\/export\/([\w-]+)\/plan$/);
+      const r = planExport(m[1]);
+      return sendJson(ctx.res, r && r.ok ? 200 : 404, r || { ok: false, error: 'profile 不存在' });
+    } },
+  // 明文密钥扫描（只读，参照 gitleaks / trufflehog 的检测思路）
+  { method: 'POST', test: p => p === '/api/security/scan-secrets', handler: async (ctx) => {
+      const body = (await readBody(ctx.req)) || {};
+      return sendJson(ctx.res, 200, scanSecrets(body));
+    } },
+  // 写入计划（不落盘）：参照 terraform plan，先看差异再决定要不要 apply
+  { method: 'POST', test: p => /^\/api\/export\/([\w-]+)\/plan$/.test(p), handler: (ctx) => {
+      const m = ctx.p.match(/^\/api\/export\/([\w-]+)\/plan$/);
+      const r = planExport(m[1]);
+      return sendJson(ctx.res, r && r.ok ? 200 : 404, r || { ok: false, error: 'profile 不存在' });
+    } },
+  // 明文密钥扫描（只读，参照 gitleaks / trufflehog 的检测思路）
+  { method: 'POST', test: p => p === '/api/security/scan-secrets', handler: async (ctx) => {
+      const body = (await readBody(ctx.req)) || {};
+      return sendJson(ctx.res, 200, scanSecrets(body));
+    } },
+  // 写入计划（不落盘）：参照 terraform plan，先看差异再决定要不要 apply
+  { method: 'POST', test: p => /^\/api\/export\/([\w-]+)\/plan$/.test(p), handler: (ctx) => {
+      const m = ctx.p.match(/^\/api\/export\/([\w-]+)\/plan$/);
+      const r = planExport(m[1]);
+      return sendJson(ctx.res, r && r.ok ? 200 : 404, r || { ok: false, error: 'profile 不存在' });
+    } },
+  // 明文密钥扫描（只读，参照 gitleaks / trufflehog 的检测思路）
+  { method: 'POST', test: p => p === '/api/security/scan-secrets', handler: async (ctx) => {
+      const body = (await readBody(ctx.req)) || {};
+      return sendJson(ctx.res, 200, scanSecrets(body));
+    } },
+  // 写入计划（不落盘）：参照 terraform plan，先看差异再决定要不要 apply
+  { method: 'POST', test: p => /^\/api\/export\/([\w-]+)\/plan$/.test(p), handler: (ctx) => {
+      const m = ctx.p.match(/^\/api\/export\/([\w-]+)\/plan$/);
+      const r = planExport(m[1]);
+      return sendJson(ctx.res, r && r.ok ? 200 : 404, r || { ok: false, error: 'profile 不存在' });
+    } },
+  // 明文密钥扫描（只读，参照 gitleaks / trufflehog 的检测思路）
+  { method: 'POST', test: p => p === '/api/security/scan-secrets', handler: async (ctx) => {
+      const body = (await readBody(ctx.req)) || {};
+      return sendJson(ctx.res, 200, scanSecrets(body));
     } },
 
   // 客户端自动探测

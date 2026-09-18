@@ -21,6 +21,22 @@ const api = {
   bulkPurge: (items) => jfetch('/api/trash/bulk-purge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) }),
   bulkEnabled: (c, ids, enabled) => jfetch(`/api/${c}/bulk-enabled`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, enabled }) }),
   trashPurgeAll: () => jfetch('/api/trash/purge-all', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }),
+  planExport: (id) => jfetch(`/api/export/${id}/plan`, { method: 'POST' }),
+  scanSecrets: () => jfetch('/api/security/scan-secrets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }),
+  planExport: (id) => jfetch(`/api/export/${id}/plan`, { method: 'POST' }),
+  scanSecrets: () => jfetch('/api/security/scan-secrets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }),
+  planExport: (id) => jfetch(`/api/export/${id}/plan`, { method: 'POST' }),
+  scanSecrets: () => jfetch('/api/security/scan-secrets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }),
+  planExport: (id) => jfetch(`/api/export/${id}/plan`, { method: 'POST' }),
+  scanSecrets: () => jfetch('/api/security/scan-secrets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }),
+  planExport: (id) => jfetch(`/api/export/${id}/plan`, { method: 'POST' }),
+  scanSecrets: () => jfetch('/api/security/scan-secrets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }),
+  planExport: (id) => jfetch(`/api/export/${id}/plan`, { method: 'POST' }),
+  scanSecrets: () => jfetch('/api/security/scan-secrets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }),
+  planExport: (id) => jfetch(`/api/export/${id}/plan`, { method: 'POST' }),
+  scanSecrets: () => jfetch('/api/security/scan-secrets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }),
+  planExport: (id) => jfetch(`/api/export/${id}/plan`, { method: 'POST' }),
+  scanSecrets: () => jfetch('/api/security/scan-secrets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }),
   export: id => jfetch('/api/export/' + id),
   apply: id => jfetch(`/api/export/${id}/apply`, { method: 'POST' }),
   postBundle: bundle => jfetch('/api/profiles/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bundle }) }),
@@ -325,12 +341,132 @@ async function renderCollection(col, prefetched) {
   $('#pageTitle').textContent = schema.label;
   const impBtn = (col === 'mcpservers' || col === 'skillrepos' || col === 'prompts') ? `<button class="btn" id="impBtn">从客户端导入</button>` : '';
   const syncBtn = (col === 'repos') ? `<button class="btn" id="syncAllBtn">同步全部启用仓库</button>` : '';
-  $('#topActions').innerHTML = impBtn + syncBtn + `<button class="btn primary" id="newBtn">+ 新建</button>`;
+  $('#topActions').innerHTML = impBtn + syncBtn + (col === 'clients' ? `<button class="btn" id="scanSec">扫描明文密钥</button>` : '') + `<button class="btn primary" id="newBtn">+ 新建</button>`;
   $('#newBtn').onclick = () => openForm(col, null, () => refreshCollection(col));
   if (col === 'mcpservers') $('#impBtn').onclick = openImportFromClient;
   else if (col === 'skillrepos') $('#impBtn').onclick = openImportSkillFromClient;
   else if (col === 'prompts') $('#impBtn').onclick = openImportPromptFromClient;
   else if (col === 'repos') $('#syncAllBtn').onclick = syncAllRepos;
+  if (col === 'clients') $('#scanSec').onclick = async () => {
+    toast('正在扫描本地配置…');
+    const r = await api.scanSecrets().catch(e => ({ error: e.message }));
+    if (r.error) return toast('扫描失败：' + r.error);
+    const lines = ['扫描 ' + r.scanned + ' 个文件：疑似明文密钥 ' + r.summary.total + ' 处'
+      + '（已收口 ' + r.summary.inVault + ' / 未登记 ' + r.summary.unknown + '），涉及 ' + r.summary.files + ' 个文件', ''];
+    if (!r.summary.total) lines.push('未发现明文密钥。');
+    const shown = r.findings.slice(0, 60);
+    for (const f of shown) lines.push('· ' + f.file + ':' + f.line + '  [' + f.name + ']  ' + f.masked + (f.inVault ? '（已收口）' : '（未登记）'));
+    if (r.findings.length > shown.length) lines.push('… 其余 ' + (r.findings.length - shown.length) + ' 条略（可通过 /api/security/scan-secrets 获取全部）');
+    for (const s of r.skipped || []) lines.push('跳过 ' + s.file + '：' + s.reason);
+    if (r.truncated) lines.push('（结果被截断：文件数或命中数达到上限）');
+    lines.push('', '提示：未登记的密钥建议收口到「API 端点」，避免散落在各配置文件里。');
+    showInfoModal('明文密钥扫描', lines.join('\n'));
+  };
+  if (col === 'clients') $('#scanSec').onclick = async () => {
+    toast('正在扫描本地配置…');
+    const r = await api.scanSecrets().catch(e => ({ error: e.message }));
+    if (r.error) return toast('扫描失败：' + r.error);
+    const lines = ['扫描 ' + r.scanned + ' 个文件：疑似明文密钥 ' + r.summary.total + ' 处'
+      + '（已收口 ' + r.summary.inVault + ' / 未登记 ' + r.summary.unknown + '），涉及 ' + r.summary.files + ' 个文件', ''];
+    if (!r.summary.total) lines.push('未发现明文密钥。');
+    const shown = r.findings.slice(0, 60);
+    for (const f of shown) lines.push('· ' + f.file + ':' + f.line + '  [' + f.name + ']  ' + f.masked + (f.inVault ? '（已收口）' : '（未登记）'));
+    if (r.findings.length > shown.length) lines.push('… 其余 ' + (r.findings.length - shown.length) + ' 条略（可通过 /api/security/scan-secrets 获取全部）');
+    for (const s of r.skipped || []) lines.push('跳过 ' + s.file + '：' + s.reason);
+    if (r.truncated) lines.push('（结果被截断：文件数或命中数达到上限）');
+    lines.push('', '提示：未登记的密钥建议收口到「API 端点」，避免散落在各配置文件里。');
+    showInfoModal('明文密钥扫描', lines.join('\n'));
+  };
+  if (col === 'clients') $('#scanSec').onclick = async () => {
+    toast('正在扫描本地配置…');
+    const r = await api.scanSecrets().catch(e => ({ error: e.message }));
+    if (r.error) return toast('扫描失败：' + r.error);
+    const lines = ['扫描 ' + r.scanned + ' 个文件：疑似明文密钥 ' + r.summary.total + ' 处'
+      + '（已收口 ' + r.summary.inVault + ' / 未登记 ' + r.summary.unknown + '），涉及 ' + r.summary.files + ' 个文件', ''];
+    if (!r.summary.total) lines.push('未发现明文密钥。');
+    const shown = r.findings.slice(0, 60);
+    for (const f of shown) lines.push('· ' + f.file + ':' + f.line + '  [' + f.name + ']  ' + f.masked + (f.inVault ? '（已收口）' : '（未登记）'));
+    if (r.findings.length > shown.length) lines.push('… 其余 ' + (r.findings.length - shown.length) + ' 条略（可通过 /api/security/scan-secrets 获取全部）');
+    for (const s of r.skipped || []) lines.push('跳过 ' + s.file + '：' + s.reason);
+    if (r.truncated) lines.push('（结果被截断：文件数或命中数达到上限）');
+    lines.push('', '提示：未登记的密钥建议收口到「API 端点」，避免散落在各配置文件里。');
+    showInfoModal('明文密钥扫描', lines.join('\n'));
+  };
+  if (col === 'clients') $('#scanSec').onclick = async () => {
+    toast('正在扫描本地配置…');
+    const r = await api.scanSecrets().catch(e => ({ error: e.message }));
+    if (r.error) return toast('扫描失败：' + r.error);
+    const lines = ['扫描 ' + r.scanned + ' 个文件：疑似明文密钥 ' + r.summary.total + ' 处'
+      + '（已收口 ' + r.summary.inVault + ' / 未登记 ' + r.summary.unknown + '），涉及 ' + r.summary.files + ' 个文件', ''];
+    if (!r.summary.total) lines.push('未发现明文密钥。');
+    const shown = r.findings.slice(0, 60);
+    for (const f of shown) lines.push('· ' + f.file + ':' + f.line + '  [' + f.name + ']  ' + f.masked + (f.inVault ? '（已收口）' : '（未登记）'));
+    if (r.findings.length > shown.length) lines.push('… 其余 ' + (r.findings.length - shown.length) + ' 条略（可通过 /api/security/scan-secrets 获取全部）');
+    for (const s of r.skipped || []) lines.push('跳过 ' + s.file + '：' + s.reason);
+    if (r.truncated) lines.push('（结果被截断：文件数或命中数达到上限）');
+    lines.push('', '提示：未登记的密钥建议收口到「API 端点」，避免散落在各配置文件里。');
+    showInfoModal('明文密钥扫描', lines.join('\n'));
+  };
+  if (col === 'clients') $('#scanSec').onclick = async () => {
+    toast('正在扫描本地配置…');
+    const r = await api.scanSecrets().catch(e => ({ error: e.message }));
+    if (r.error) return toast('扫描失败：' + r.error);
+    const lines = ['扫描 ' + r.scanned + ' 个文件：疑似明文密钥 ' + r.summary.total + ' 处'
+      + '（已收口 ' + r.summary.inVault + ' / 未登记 ' + r.summary.unknown + '），涉及 ' + r.summary.files + ' 个文件', ''];
+    if (!r.summary.total) lines.push('未发现明文密钥。');
+    const shown = r.findings.slice(0, 60);
+    for (const f of shown) lines.push('· ' + f.file + ':' + f.line + '  [' + f.name + ']  ' + f.masked + (f.inVault ? '（已收口）' : '（未登记）'));
+    if (r.findings.length > shown.length) lines.push('… 其余 ' + (r.findings.length - shown.length) + ' 条略（可通过 /api/security/scan-secrets 获取全部）');
+    for (const s of r.skipped || []) lines.push('跳过 ' + s.file + '：' + s.reason);
+    if (r.truncated) lines.push('（结果被截断：文件数或命中数达到上限）');
+    lines.push('', '提示：未登记的密钥建议收口到「API 端点」，避免散落在各配置文件里。');
+    showInfoModal('明文密钥扫描', lines.join('\n'));
+  };
+  if (col === 'clients') $('#scanSec').onclick = async () => {
+    toast('正在扫描本地配置…');
+    const r = await api.scanSecrets().catch(e => ({ error: e.message }));
+    if (r.error) return toast('扫描失败：' + r.error);
+    const lines = ['扫描 ' + r.scanned + ' 个文件：疑似明文密钥 ' + r.summary.total + ' 处'
+      + '（已收口 ' + r.summary.inVault + ' / 未登记 ' + r.summary.unknown + '），涉及 ' + r.summary.files + ' 个文件', ''];
+    if (!r.summary.total) lines.push('未发现明文密钥。');
+    const shown = r.findings.slice(0, 60);
+    for (const f of shown) lines.push('· ' + f.file + ':' + f.line + '  [' + f.name + ']  ' + f.masked + (f.inVault ? '（已收口）' : '（未登记）'));
+    if (r.findings.length > shown.length) lines.push('… 其余 ' + (r.findings.length - shown.length) + ' 条略（可通过 /api/security/scan-secrets 获取全部）');
+    for (const s of r.skipped || []) lines.push('跳过 ' + s.file + '：' + s.reason);
+    if (r.truncated) lines.push('（结果被截断：文件数或命中数达到上限）');
+    lines.push('', '提示：未登记的密钥建议收口到「API 端点」，避免散落在各配置文件里。');
+    showInfoModal('明文密钥扫描', lines.join('\n'));
+  };
+  if (col === 'clients') $('#scanSec').onclick = async () => {
+    toast('正在扫描本地配置…');
+    const r = await api.scanSecrets().catch(e => ({ error: e.message }));
+    if (r.error) return toast('扫描失败：' + r.error);
+    const lines = ['扫描 ' + r.scanned + ' 个文件：疑似明文密钥 ' + r.summary.total + ' 处'
+      + '（已收口 ' + r.summary.inVault + ' / 未登记 ' + r.summary.unknown + '），涉及 ' + r.summary.files + ' 个文件', ''];
+    if (!r.summary.total) lines.push('未发现明文密钥。');
+    const shown = r.findings.slice(0, 60);
+    for (const f of shown) lines.push('· ' + f.file + ':' + f.line + '  [' + f.name + ']  ' + f.masked + (f.inVault ? '（已收口）' : '（未登记）'));
+    if (r.findings.length > shown.length) lines.push('… 其余 ' + (r.findings.length - shown.length) + ' 条略（可通过 /api/security/scan-secrets 获取全部）');
+    for (const s of r.skipped || []) lines.push('跳过 ' + s.file + '：' + s.reason);
+    if (r.truncated) lines.push('（结果被截断：文件数或命中数达到上限）');
+    lines.push('', '提示：未登记的密钥建议收口到「API 端点」，避免散落在各配置文件里。');
+    showInfoModal('明文密钥扫描', lines.join('\n'));
+  };
+  if (col === 'clients') $('#scanSec').onclick = async () => {
+    toast('正在扫描本地配置…');
+    const r = await api.scanSecrets().catch(e => ({ error: e.message }));
+    if (r.error) return toast('扫描失败：' + r.error);
+    const lines = ['扫描 ' + r.scanned + ' 个文件：疑似明文密钥 ' + r.summary.total + ' 处'
+      + '（已收口 ' + r.summary.inVault + ' / 未登记 ' + r.summary.unknown + '），涉及 ' + r.summary.files + ' 个文件', ''];
+    if (!r.summary.total) lines.push('未发现明文密钥。');
+    const shown = r.findings.slice(0, 60);
+    for (const f of shown) lines.push('· ' + f.file + ':' + f.line + '  [' + f.name + ']  ' + f.masked + (f.inVault ? '（已收口）' : '（未登记）'));
+    if (r.findings.length > shown.length) lines.push('… 其余 ' + (r.findings.length - shown.length) + ' 条略（可通过 /api/security/scan-secrets 获取全部）');
+    for (const s of r.skipped || []) lines.push('跳过 ' + s.file + '：' + s.reason);
+    if (r.truncated) lines.push('（结果被截断：文件数或命中数达到上限）');
+    lines.push('', '提示：未登记的密钥建议收口到「API 端点」，避免散落在各配置文件里。');
+    showInfoModal('明文密钥扫描', lines.join('\n'));
+  };
 
   const view = $('#view');
   // 有 enabled 字段的集合才显示批量启用/停用
@@ -742,6 +878,14 @@ async function loadExport() {
       <div class="code" id="code_${i}">${esc(JSON.stringify(c.content, null, 2))}</div>
       <div class="ops" style="margin-top:8px">
         <button class="btn sm" data-copy="${i}">复制</button>
+        <button class="btn sm" data-plan="${i}">预览差异</button>
+        <button class="btn sm" data-plan="${i}">预览差异</button>
+        <button class="btn sm" data-plan="${i}">预览差异</button>
+        <button class="btn sm" data-plan="${i}">预览差异</button>
+        <button class="btn sm" data-plan="${i}">预览差异</button>
+        <button class="btn sm" data-plan="${i}">预览差异</button>
+        <button class="btn sm" data-plan="${i}">预览差异</button>
+        <button class="btn sm" data-plan="${i}">预览差异</button>
         <button class="btn sm" data-dl="${i}">下载 mcp.json</button>
         <button class="btn sm primary" data-write="${i}">写入客户端</button>
       </div>
@@ -749,6 +893,150 @@ async function loadExport() {
 
   const jsonOf = i => JSON.stringify(data.configs[i].content, null, 2);
   out.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => { navigator.clipboard.writeText(jsonOf(b.dataset.copy)); toast('已复制'); });
+  out.querySelectorAll('[data-plan]').forEach(b => b.onclick = async () => {
+    const r = await api.planExport(currentProfile).catch(e => ({ error: e.message }));
+    if (r.error) return toast('获取计划失败：' + r.error);
+    const lines = ['目标 ' + r.summary.targets + ' 个：新增 ' + r.summary.added + ' · 修改 ' + r.summary.changed + ' · 不变 ' + r.summary.unchanged + (r.summary.warnings ? (' · 警告 ' + r.summary.warnings) : ''), ''];
+    for (const t of r.targets || []) {
+      const st = { ok: '', 'new-file': '（新文件）', 'invalid-json': '（非法 JSON，将跳过）', 'no-path': '（未配置路径）' }[t.status] || '';
+      lines.push('● ' + t.clientName + ' · ' + (t.path || '（无路径）') + ' ' + st);
+      for (const a of t.mcpServers.add) lines.push('  + ' + a.name + '  ' + JSON.stringify(a.after));
+      for (const c of t.mcpServers.change) lines.push('  ~ ' + c.name + '  ' + JSON.stringify(c.before) + '  →  ' + JSON.stringify(c.after));
+      for (const s of t.mcpServers.same) lines.push('  = ' + s);
+      for (const k of t.mcpServers.kept) lines.push('  · 保留（方案外）' + k);
+      for (const a of t.env.add) lines.push('  + env.' + a.key + ' = ' + a.after);
+      for (const c of t.env.change) lines.push('  ~ env.' + c.key + ' = ' + c.before + ' → ' + c.after);
+      lines.push('');
+    }
+    lines.push('以上为写入计划预览，未改动任何文件；密钥已脱敏。');
+    showInfoModal('写入计划 · ' + (r.profileName || ''), lines.join('\n'));
+  });
+  out.querySelectorAll('[data-plan]').forEach(b => b.onclick = async () => {
+    const r = await api.planExport(currentProfile).catch(e => ({ error: e.message }));
+    if (r.error) return toast('获取计划失败：' + r.error);
+    const lines = ['目标 ' + r.summary.targets + ' 个：新增 ' + r.summary.added + ' · 修改 ' + r.summary.changed + ' · 不变 ' + r.summary.unchanged + (r.summary.warnings ? (' · 警告 ' + r.summary.warnings) : ''), ''];
+    for (const t of r.targets || []) {
+      const st = { ok: '', 'new-file': '（新文件）', 'invalid-json': '（非法 JSON，将跳过）', 'no-path': '（未配置路径）' }[t.status] || '';
+      lines.push('● ' + t.clientName + ' · ' + (t.path || '（无路径）') + ' ' + st);
+      for (const a of t.mcpServers.add) lines.push('  + ' + a.name + '  ' + JSON.stringify(a.after));
+      for (const c of t.mcpServers.change) lines.push('  ~ ' + c.name + '  ' + JSON.stringify(c.before) + '  →  ' + JSON.stringify(c.after));
+      for (const s of t.mcpServers.same) lines.push('  = ' + s);
+      for (const k of t.mcpServers.kept) lines.push('  · 保留（方案外）' + k);
+      for (const a of t.env.add) lines.push('  + env.' + a.key + ' = ' + a.after);
+      for (const c of t.env.change) lines.push('  ~ env.' + c.key + ' = ' + c.before + ' → ' + c.after);
+      lines.push('');
+    }
+    lines.push('以上为写入计划预览，未改动任何文件；密钥已脱敏。');
+    showInfoModal('写入计划 · ' + (r.profileName || ''), lines.join('\n'));
+  });
+  out.querySelectorAll('[data-plan]').forEach(b => b.onclick = async () => {
+    const r = await api.planExport(currentProfile).catch(e => ({ error: e.message }));
+    if (r.error) return toast('获取计划失败：' + r.error);
+    const lines = ['目标 ' + r.summary.targets + ' 个：新增 ' + r.summary.added + ' · 修改 ' + r.summary.changed + ' · 不变 ' + r.summary.unchanged + (r.summary.warnings ? (' · 警告 ' + r.summary.warnings) : ''), ''];
+    for (const t of r.targets || []) {
+      const st = { ok: '', 'new-file': '（新文件）', 'invalid-json': '（非法 JSON，将跳过）', 'no-path': '（未配置路径）' }[t.status] || '';
+      lines.push('● ' + t.clientName + ' · ' + (t.path || '（无路径）') + ' ' + st);
+      for (const a of t.mcpServers.add) lines.push('  + ' + a.name + '  ' + JSON.stringify(a.after));
+      for (const c of t.mcpServers.change) lines.push('  ~ ' + c.name + '  ' + JSON.stringify(c.before) + '  →  ' + JSON.stringify(c.after));
+      for (const s of t.mcpServers.same) lines.push('  = ' + s);
+      for (const k of t.mcpServers.kept) lines.push('  · 保留（方案外）' + k);
+      for (const a of t.env.add) lines.push('  + env.' + a.key + ' = ' + a.after);
+      for (const c of t.env.change) lines.push('  ~ env.' + c.key + ' = ' + c.before + ' → ' + c.after);
+      lines.push('');
+    }
+    lines.push('以上为写入计划预览，未改动任何文件；密钥已脱敏。');
+    showInfoModal('写入计划 · ' + (r.profileName || ''), lines.join('\n'));
+  });
+  out.querySelectorAll('[data-plan]').forEach(b => b.onclick = async () => {
+    const r = await api.planExport(currentProfile).catch(e => ({ error: e.message }));
+    if (r.error) return toast('获取计划失败：' + r.error);
+    const lines = ['目标 ' + r.summary.targets + ' 个：新增 ' + r.summary.added + ' · 修改 ' + r.summary.changed + ' · 不变 ' + r.summary.unchanged + (r.summary.warnings ? (' · 警告 ' + r.summary.warnings) : ''), ''];
+    for (const t of r.targets || []) {
+      const st = { ok: '', 'new-file': '（新文件）', 'invalid-json': '（非法 JSON，将跳过）', 'no-path': '（未配置路径）' }[t.status] || '';
+      lines.push('● ' + t.clientName + ' · ' + (t.path || '（无路径）') + ' ' + st);
+      for (const a of t.mcpServers.add) lines.push('  + ' + a.name + '  ' + JSON.stringify(a.after));
+      for (const c of t.mcpServers.change) lines.push('  ~ ' + c.name + '  ' + JSON.stringify(c.before) + '  →  ' + JSON.stringify(c.after));
+      for (const s of t.mcpServers.same) lines.push('  = ' + s);
+      for (const k of t.mcpServers.kept) lines.push('  · 保留（方案外）' + k);
+      for (const a of t.env.add) lines.push('  + env.' + a.key + ' = ' + a.after);
+      for (const c of t.env.change) lines.push('  ~ env.' + c.key + ' = ' + c.before + ' → ' + c.after);
+      lines.push('');
+    }
+    lines.push('以上为写入计划预览，未改动任何文件；密钥已脱敏。');
+    showInfoModal('写入计划 · ' + (r.profileName || ''), lines.join('\n'));
+  });
+  out.querySelectorAll('[data-plan]').forEach(b => b.onclick = async () => {
+    const r = await api.planExport(currentProfile).catch(e => ({ error: e.message }));
+    if (r.error) return toast('获取计划失败：' + r.error);
+    const lines = ['目标 ' + r.summary.targets + ' 个：新增 ' + r.summary.added + ' · 修改 ' + r.summary.changed + ' · 不变 ' + r.summary.unchanged + (r.summary.warnings ? (' · 警告 ' + r.summary.warnings) : ''), ''];
+    for (const t of r.targets || []) {
+      const st = { ok: '', 'new-file': '（新文件）', 'invalid-json': '（非法 JSON，将跳过）', 'no-path': '（未配置路径）' }[t.status] || '';
+      lines.push('● ' + t.clientName + ' · ' + (t.path || '（无路径）') + ' ' + st);
+      for (const a of t.mcpServers.add) lines.push('  + ' + a.name + '  ' + JSON.stringify(a.after));
+      for (const c of t.mcpServers.change) lines.push('  ~ ' + c.name + '  ' + JSON.stringify(c.before) + '  →  ' + JSON.stringify(c.after));
+      for (const s of t.mcpServers.same) lines.push('  = ' + s);
+      for (const k of t.mcpServers.kept) lines.push('  · 保留（方案外）' + k);
+      for (const a of t.env.add) lines.push('  + env.' + a.key + ' = ' + a.after);
+      for (const c of t.env.change) lines.push('  ~ env.' + c.key + ' = ' + c.before + ' → ' + c.after);
+      lines.push('');
+    }
+    lines.push('以上为写入计划预览，未改动任何文件；密钥已脱敏。');
+    showInfoModal('写入计划 · ' + (r.profileName || ''), lines.join('\n'));
+  });
+  out.querySelectorAll('[data-plan]').forEach(b => b.onclick = async () => {
+    const r = await api.planExport(currentProfile).catch(e => ({ error: e.message }));
+    if (r.error) return toast('获取计划失败：' + r.error);
+    const lines = ['目标 ' + r.summary.targets + ' 个：新增 ' + r.summary.added + ' · 修改 ' + r.summary.changed + ' · 不变 ' + r.summary.unchanged + (r.summary.warnings ? (' · 警告 ' + r.summary.warnings) : ''), ''];
+    for (const t of r.targets || []) {
+      const st = { ok: '', 'new-file': '（新文件）', 'invalid-json': '（非法 JSON，将跳过）', 'no-path': '（未配置路径）' }[t.status] || '';
+      lines.push('● ' + t.clientName + ' · ' + (t.path || '（无路径）') + ' ' + st);
+      for (const a of t.mcpServers.add) lines.push('  + ' + a.name + '  ' + JSON.stringify(a.after));
+      for (const c of t.mcpServers.change) lines.push('  ~ ' + c.name + '  ' + JSON.stringify(c.before) + '  →  ' + JSON.stringify(c.after));
+      for (const s of t.mcpServers.same) lines.push('  = ' + s);
+      for (const k of t.mcpServers.kept) lines.push('  · 保留（方案外）' + k);
+      for (const a of t.env.add) lines.push('  + env.' + a.key + ' = ' + a.after);
+      for (const c of t.env.change) lines.push('  ~ env.' + c.key + ' = ' + c.before + ' → ' + c.after);
+      lines.push('');
+    }
+    lines.push('以上为写入计划预览，未改动任何文件；密钥已脱敏。');
+    showInfoModal('写入计划 · ' + (r.profileName || ''), lines.join('\n'));
+  });
+  out.querySelectorAll('[data-plan]').forEach(b => b.onclick = async () => {
+    const r = await api.planExport(currentProfile).catch(e => ({ error: e.message }));
+    if (r.error) return toast('获取计划失败：' + r.error);
+    const lines = ['目标 ' + r.summary.targets + ' 个：新增 ' + r.summary.added + ' · 修改 ' + r.summary.changed + ' · 不变 ' + r.summary.unchanged + (r.summary.warnings ? (' · 警告 ' + r.summary.warnings) : ''), ''];
+    for (const t of r.targets || []) {
+      const st = { ok: '', 'new-file': '（新文件）', 'invalid-json': '（非法 JSON，将跳过）', 'no-path': '（未配置路径）' }[t.status] || '';
+      lines.push('● ' + t.clientName + ' · ' + (t.path || '（无路径）') + ' ' + st);
+      for (const a of t.mcpServers.add) lines.push('  + ' + a.name + '  ' + JSON.stringify(a.after));
+      for (const c of t.mcpServers.change) lines.push('  ~ ' + c.name + '  ' + JSON.stringify(c.before) + '  →  ' + JSON.stringify(c.after));
+      for (const s of t.mcpServers.same) lines.push('  = ' + s);
+      for (const k of t.mcpServers.kept) lines.push('  · 保留（方案外）' + k);
+      for (const a of t.env.add) lines.push('  + env.' + a.key + ' = ' + a.after);
+      for (const c of t.env.change) lines.push('  ~ env.' + c.key + ' = ' + c.before + ' → ' + c.after);
+      lines.push('');
+    }
+    lines.push('以上为写入计划预览，未改动任何文件；密钥已脱敏。');
+    showInfoModal('写入计划 · ' + (r.profileName || ''), lines.join('\n'));
+  });
+  out.querySelectorAll('[data-plan]').forEach(b => b.onclick = async () => {
+    const r = await api.planExport(currentProfile).catch(e => ({ error: e.message }));
+    if (r.error) return toast('获取计划失败：' + r.error);
+    const lines = ['目标 ' + r.summary.targets + ' 个：新增 ' + r.summary.added + ' · 修改 ' + r.summary.changed + ' · 不变 ' + r.summary.unchanged + (r.summary.warnings ? (' · 警告 ' + r.summary.warnings) : ''), ''];
+    for (const t of r.targets || []) {
+      const st = { ok: '', 'new-file': '（新文件）', 'invalid-json': '（非法 JSON，将跳过）', 'no-path': '（未配置路径）' }[t.status] || '';
+      lines.push('● ' + t.clientName + ' · ' + (t.path || '（无路径）') + ' ' + st);
+      for (const a of t.mcpServers.add) lines.push('  + ' + a.name + '  ' + JSON.stringify(a.after));
+      for (const c of t.mcpServers.change) lines.push('  ~ ' + c.name + '  ' + JSON.stringify(c.before) + '  →  ' + JSON.stringify(c.after));
+      for (const s of t.mcpServers.same) lines.push('  = ' + s);
+      for (const k of t.mcpServers.kept) lines.push('  · 保留（方案外）' + k);
+      for (const a of t.env.add) lines.push('  + env.' + a.key + ' = ' + a.after);
+      for (const c of t.env.change) lines.push('  ~ env.' + c.key + ' = ' + c.before + ' → ' + c.after);
+      lines.push('');
+    }
+    lines.push('以上为写入计划预览，未改动任何文件；密钥已脱敏。');
+    showInfoModal('写入计划 · ' + (r.profileName || ''), lines.join('\n'));
+  });
   out.querySelectorAll('[data-dl]').forEach(b => b.onclick = () => {
     const blob = new Blob([jsonOf(b.dataset.dl)], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'mcp.json'; a.click();
