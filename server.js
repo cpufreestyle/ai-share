@@ -3,7 +3,8 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
-const { COLLECTIONS, DATA_DIR, purgeTombstones, list, get, create, update, remove, rewrite, exportAll, restoreAll, exportProfileBundle, importProfileBundle, importScannedServers, importScannedSkills, importScannedPrompts, collectFromClients, restore, purgeTombstone, listDeleted } = require('./lib/store');
+const crypto = require('crypto');
+const { COLLECTIONS, DATA_DIR, purgeTombstones, list, get, create, update, remove, rewrite, exportAll, restoreAll, exportProfileBundle, importProfileBundle, importScannedServers, importScannedSkills, importScannedPrompts, collectFromClients, restore, purgeTombstone, listDeleted, removeMany, restoreMany, purgeMany, setEnabledMany, purgeAllTombstones } = require('./lib/store');
 const { probeProvider, checkMcp } = require('./lib/probe');
 const { exportProfile, applyExport, detectClients, scanClientMcp, scanClientSkills, scanClientPrompts, expand, syncRepo } = require('./lib/export');
 const sync = require('./lib/sync');
@@ -376,6 +377,41 @@ const ROUTES = [
       return sendJson(ctx.res, r ? 200 : 404, r || { error: '墓碑不存在' });
     } },
 
+  // 批量删除（移入回收站）：一次请求完成 N 条，避免 N 次往返与 N 次加解锁
+  { method: 'POST', test: (p) => p.split('/').length === 4 && p.endsWith('/bulk-delete'), handler: async (ctx) => {
+      const col = ctx.p.split('/')[2];
+      if (!COLLECTIONS.includes(col)) return sendJson(ctx.res, 400, { error: '未知集合' });
+      const body = (await readBody(ctx.req)) || {};
+      if (!Array.isArray(body.ids)) return sendJson(ctx.res, 400, { error: 'ids 必须是数组' });
+      if (body.ids.length > 500) return sendJson(ctx.res, 400, { error: '一次最多 500 条' });
+      return sendJson(ctx.res, 200, removeMany(col, body.ids));
+    } },
+  // 回收站批量恢复
+  { method: 'POST', test: (p) => p === '/api/trash/bulk-restore', handler: async (ctx) => {
+      const body = (await readBody(ctx.req)) || {};
+      if (!Array.isArray(body.items)) return sendJson(ctx.res, 400, { error: 'items 必须是数组' });
+      if (body.items.length > 500) return sendJson(ctx.res, 400, { error: '一次最多 500 条' });
+      return sendJson(ctx.res, 200, restoreMany(body.items));
+    } },
+  // 回收站批量彻底删除
+  { method: 'POST', test: (p) => p === '/api/trash/bulk-purge', handler: async (ctx) => {
+      const body = (await readBody(ctx.req)) || {};
+      if (!Array.isArray(body.items)) return sendJson(ctx.res, 400, { error: 'items 必须是数组' });
+      if (body.items.length > 500) return sendJson(ctx.res, 400, { error: '一次最多 500 条' });
+      return sendJson(ctx.res, 200, purgeMany(body.items));
+    } },
+  // 批量启用/停用
+  { method: 'POST', test: (p) => p.split('/').length === 4 && p.endsWith('/bulk-enabled'), handler: async (ctx) => {
+      const col = ctx.p.split('/')[2];
+      if (!COLLECTIONS.includes(col)) return sendJson(ctx.res, 400, { error: '未知集合' });
+      const body = (await readBody(ctx.req)) || {};
+      if (!Array.isArray(body.ids)) return sendJson(ctx.res, 400, { error: 'ids 必须是数组' });
+      if (typeof body.enabled !== 'boolean') return sendJson(ctx.res, 400, { error: 'enabled 必须是布尔值' });
+      if (body.ids.length > 500) return sendJson(ctx.res, 400, { error: '一次最多 500 条' });
+      return sendJson(ctx.res, 200, setEnabledMany(col, body.ids, body.enabled));
+    } },
+  // 回收站一键清空（清掉所有集合的全部墓碑）
+  { method: 'POST', test: (p) => p === '/api/trash/purge-all', handler: (ctx) => sendJson(ctx.res, 200, purgeAllTombstones()) },
 ];
 
 // 资源 CRUD: /api/:col  /api/:col/:id
@@ -385,7 +421,18 @@ async function handleCrud(req, res, p) {
   const col = m[1], id = m[2];
   if (!COLLECTIONS.includes(col)) { send(res, 400, { error: '未知集合' }); return true; }
   if (req.method === 'GET') {
-    if (!id) { send(res, 200, list(col)); return true; }
+    if (!id) {
+      // 列表接口带 ETag：重复拉取命中 304，省掉整份 JSON 的传输与解析（浏览器仍会拿到本地缓存体）
+      const payload = JSON.stringify(list(col));
+      const etag = '"' + Buffer.byteLength(payload).toString(16) + '-' + crypto.createHash('md5').update(payload).digest('hex') + '"';
+      if (req.headers['if-none-match'] === etag) {
+        res.writeHead(304, { 'ETag': etag, 'Cache-Control': 'no-cache' });
+        res.end();
+        return true;
+      }
+      send(res, 200, payload, 'application/json', { 'ETag': etag, 'Cache-Control': 'no-cache' });
+      return true;
+    }
     const it = get(col, id);
     if (it) { send(res, 200, it); return true; }
     send(res, 404, { error: '不存在' });

@@ -52,6 +52,61 @@ try {
   const back = store.restore('providers', full.id);
   ok('恢复后字段完整不丢失', back && back.name === 'FULLROW' && back.baseUrl === 'https://f.test' && back.notes === 'keepme');
   ok('恢复后重回正常列表', store.list('providers').some((x) => x.id === full.id));
+
+  // 批量操作：一次加锁完成 N 条，替代前端 N 次串行请求
+  const b1 = store.create('prompts', { title: 'B1' });
+  const b2 = store.create('prompts', { title: 'B2' });
+  const b3 = store.create('prompts', { title: 'B3' });
+  const rm = store.removeMany('prompts', [b1.id, b2.id, 'nope']);
+  ok('removeMany 删除了 2 条', rm.removed === 2);
+  ok('removeMany 报告了 1 条不存在', rm.missing.length === 1 && rm.missing[0] === 'nope');
+  ok('批量删除后进入墓碑', [b1.id, b2.id].every(id => store.listDeleted('prompts').some(x => x.id === id)));
+  ok('批量删除不影响未选中的记录', store.list('prompts').some(x => x.id === b3.id && !x._deleted));
+  ok('removeMany 空数组不报错', store.removeMany('prompts', []).removed === 0);
+
+  const rr = store.restoreMany([{ col: 'prompts', id: b1.id }, { col: 'prompts', id: b2.id }, { col: 'prompts', id: 'ghost' }]);
+  ok('restoreMany 恢复了 2 条', rr.restored === 2);
+  ok('restoreMany 报告了 1 条不存在', rr.missing.length === 1);
+  ok('批量恢复后重回正常列表', [b1.id, b2.id].every(id => store.list('prompts').some(x => x.id === id && !x._deleted)));
+  ok('restoreMany 忽略未知集合', store.restoreMany([{ col: 'nope', id: b3.id }]).restored === 0);
+
+  store.remove('prompts', b3.id);
+  const pp = store.purgeMany([{ col: 'prompts', id: b3.id }]);
+  ok('purgeMany 彻底删除了 1 条', pp.purged === 1);
+  ok('purgeMany 后墓碑消失', !store.listDeleted('prompts').some(x => x.id === b3.id));
+  // 安全边界：purgeMany 只对墓碑生效，不能误删存活记录
+  const alive = store.create('prompts', { title: 'ALIVE' });
+  const pp2 = store.purgeMany([{ col: 'prompts', id: alive.id }]);
+  ok('purgeMany 不删存活记录', pp2.purged === 0 && store.list('prompts').some(x => x.id === alive.id));
+  ok('purgeMany 对非墓碑报 missing', pp2.missing.length === 1);
+
+  // 批量启用/停用
+  const e1 = store.create('mcpservers', { name: 'E1', type: 'stdio', command: 'npx', enabled: false });
+  const e2 = store.create('mcpservers', { name: 'E2', type: 'stdio', command: 'npx', enabled: false });
+  const en = store.setEnabledMany('mcpservers', [e1.id, e2.id], true);
+  ok('setEnabledMany 切换 2 条', en.changed === 2);
+  ok('setEnabledMany 后 enabled 为 true', [e1.id, e2.id].every((id) => store.get('mcpservers', id).enabled === true));
+  ok('setEnabledMany 同值重复调用 changed 为 0', store.setEnabledMany('mcpservers', [e1.id], true).changed === 0);
+  ok('setEnabledMany 停用生效', store.setEnabledMany('mcpservers', [e1.id, e2.id], false).changed === 2 && store.get('mcpservers', e1.id).enabled === false);
+  ok('setEnabledMany 空数组不报错', store.setEnabledMany('mcpservers', [], true).changed === 0);
+  const dead = store.create('mcpservers', { name: 'DEAD', type: 'stdio', command: 'npx', enabled: false });
+  store.remove('mcpservers', dead.id);
+  const deadRes = store.setEnabledMany('mcpservers', [dead.id], true);
+  ok('setEnabledMany 不触碰墓碑', deadRes.changed === 0 && deadRes.missing.length === 1);
+
+  // 一键清空回收站
+  const t1 = store.create('prompts', { title: 'T1' });
+  const t2 = store.create('prompts', { title: 'T2' });
+  const liveP = store.create('prompts', { title: 'LIVE-P' });
+  store.remove('prompts', t1.id);
+  store.remove('prompts', t2.id);
+  const pa = store.purgeAllTombstones();
+  ok('purgeAllTombstones 返回总数与分集合计数', pa.total >= 2 && typeof pa.byCollection === 'object');
+  ok('purgeAllTombstones 计数含 prompts', (pa.byCollection.prompts || 0) >= 2);
+  ok('purgeAllTombstones 后墓碑清空', store.listDeleted('prompts').length === 0);
+  ok('purgeAllTombstones 保留存活记录', store.list('prompts').some((x) => x.id === liveP.id));
+  ok('purgeAllTombstones 可重复调用', store.purgeAllTombstones().total === 0);
+
   console.log('\n全部通过：' + passed + ' 项');
 } catch (e) {
   console.error('\n测试失败：', e.message);

@@ -79,6 +79,78 @@ server.listen(0, '127.0.0.1', async () => {
     r = await request(port, '/api/providers/' + badProv.id + '/test', { 'Content-Type': 'application/json' }, 'POST', '{}');
     ok('服务器内部错误返回 500 且已脱敏', r.status === 500 && r.body.indexOf('内部错误') !== -1 && r.body.indexOf('ERR_') === -1);
 
+
+    // 批量操作路由：一次请求完成 N 条
+    const ba = store.create('clients', { title: 'BA' });
+    const bb = store.create('clients', { title: 'BB' });
+    const H = { 'Content-Type': 'application/json' };
+    r = await request(port, '/api/clients/bulk-delete', H, 'POST', JSON.stringify({ ids: [ba.id, bb.id] }));
+    ok('bulk-delete 返回 200', r.status === 200);
+    ok('bulk-delete 删除了 2 条', JSON.parse(r.body).removed === 2);
+    ok('bulk-delete 后进入回收站', store.listDeleted('clients').filter(x => x.id === ba.id || x.id === bb.id).length === 2);
+
+    r = await request(port, '/api/trash/bulk-restore', H, 'POST', JSON.stringify({ items: [{ col: 'clients', id: ba.id }] }));
+    ok('bulk-restore 返回 200', r.status === 200);
+    ok('bulk-restore 恢复了 1 条', JSON.parse(r.body).restored === 1);
+
+    r = await request(port, '/api/trash/bulk-purge', H, 'POST', JSON.stringify({ items: [{ col: 'clients', id: bb.id }] }));
+    ok('bulk-purge 返回 200', r.status === 200);
+    ok('bulk-purge 彻底删除了 1 条', JSON.parse(r.body).purged === 1);
+    ok('bulk-purge 后墓碑消失', !store.listDeleted('clients').some(x => x.id === bb.id));
+
+    r = await request(port, '/api/clients/bulk-delete', H, 'POST', '{"ids":"x"}');
+    ok('bulk-delete 非数组 ids 返回 400', r.status === 400);
+    r = await request(port, '/api/nope/bulk-delete', H, 'POST', '{"ids":[]}');
+    ok('bulk-delete 未知集合返回 400', r.status === 400);
+    r = await request(port, '/api/trash/bulk-restore', H, 'POST', '{"items":"x"}');
+    ok('bulk-restore 非数组 items 返回 400', r.status === 400);
+    r = await request(port, '/api/trash/bulk-purge', H, 'POST', '{"items":"x"}');
+    ok('bulk-purge 非数组 items 返回 400', r.status === 400);
+    r = await request(port, '/api/clients/bulk-delete', H, 'POST', JSON.stringify({ ids: new Array(501).fill('x') }));
+    ok('bulk-delete 超过 500 条返回 400', r.status === 400);
+
+    // 列表接口 ETag / 304：重复拉取不再传输整份 JSON
+    store.create('providers', { name: 'etag-probe', baseUrl: 'https://e.test' });
+    r = await request(port, '/api/providers');
+    ok('列表返回 ETag', r.status === 200 && !!r.headers.etag);
+    ok('列表允许缓存但需再校验', String(r.headers['cache-control'] || '').indexOf('no-cache') !== -1);
+    const et1 = r.headers.etag;
+    r = await request(port, '/api/providers', { 'If-None-Match': et1 });
+    ok('带 If-None-Match 命中 304', r.status === 304);
+    ok('304 无响应体', r.body === '');
+    store.create('providers', { name: 'etag-probe-2', baseUrl: 'https://e2.test' });
+    r = await request(port, '/api/providers', { 'If-None-Match': et1 });
+    ok('数据变化后不再 304（避免客户端吃旧数据）', r.status === 200);
+    ok('新 ETag 与旧的不同', r.headers.etag !== et1);
+
+    // 批量启用/停用
+    const ea = store.create('mcpservers', { name: 'EA', type: 'stdio', command: 'npx', enabled: false });
+    const eb = store.create('mcpservers', { name: 'EB', type: 'stdio', command: 'npx', enabled: false });
+    r = await request(port, '/api/mcpservers/bulk-enabled', H, 'POST', JSON.stringify({ ids: [ea.id, eb.id], enabled: true }));
+    ok('bulk-enabled 返回 200', r.status === 200);
+    ok('bulk-enabled 启用 2 条', JSON.parse(r.body).changed === 2);
+    ok('批量启用后确实为启用态', store.list('mcpservers').filter((x) => x.id === ea.id || x.id === eb.id).every((x) => x.enabled === true));
+    r = await request(port, '/api/mcpservers/bulk-enabled', H, 'POST', JSON.stringify({ ids: [ea.id, eb.id], enabled: true }));
+    ok('重复设置同值 changed 为 0', JSON.parse(r.body).changed === 0);
+    r = await request(port, '/api/mcpservers/bulk-enabled', H, 'POST', JSON.stringify({ ids: [ea.id], enabled: 'yes' }));
+    ok('enabled 非布尔返回 400', r.status === 400);
+    r = await request(port, '/api/mcpservers/bulk-enabled', H, 'POST', '{"ids":"x","enabled":true}');
+    ok('bulk-enabled 非数组 ids 返回 400', r.status === 400);
+    r = await request(port, '/api/nope/bulk-enabled', H, 'POST', '{"ids":[],"enabled":true}');
+    ok('bulk-enabled 未知集合返回 400', r.status === 400);
+
+    // 回收站一键清空
+    const ta = store.create('clients', { title: 'TA' });
+    const tb = store.create('clients', { title: 'TB' });
+    const liveC = store.create('clients', { title: 'LIVE-C' });
+    store.remove('clients', ta.id);
+    store.remove('clients', tb.id);
+    r = await request(port, '/api/trash/purge-all', H, 'POST', '{}');
+    ok('purge-all 返回 200', r.status === 200);
+    ok('purge-all 清掉至少 2 条墓碑', JSON.parse(r.body).total >= 2);
+    ok('purge-all 后该集合无墓碑', store.listDeleted('clients').length === 0);
+    ok('purge-all 保留存活记录', store.list('clients').some((x) => x.id === liveC.id));
+
     r = await request(port, '/app.js', { 'Accept-Encoding': 'gzip' });
     ok('静态资源 gzip：200', r.status === 200);
     ok('静态资源 gzip：Content-Encoding=gzip', r.headers['content-encoding'] === 'gzip');

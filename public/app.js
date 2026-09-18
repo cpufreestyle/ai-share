@@ -16,6 +16,11 @@ const api = {
   update: (c, id, body) => jfetch(`/api/${c}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   remove: (c, id) => jfetch(`/api/${c}/${id}`, { method: 'DELETE' }),
   purgeTombstone: (c, id) => jfetch(`/api/${c}/${id}/tombstone`, { method: 'DELETE' }),
+  bulkDelete: (c, ids) => jfetch(`/api/${c}/bulk-delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) }),
+  bulkRestore: (items) => jfetch('/api/trash/bulk-restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) }),
+  bulkPurge: (items) => jfetch('/api/trash/bulk-purge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) }),
+  bulkEnabled: (c, ids, enabled) => jfetch(`/api/${c}/bulk-enabled`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, enabled }) }),
+  trashPurgeAll: () => jfetch('/api/trash/purge-all', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }),
   export: id => jfetch('/api/export/' + id),
   apply: id => jfetch(`/api/export/${id}/apply`, { method: 'POST' }),
   postBundle: bundle => jfetch('/api/profiles/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bundle }) }),
@@ -308,28 +313,52 @@ function closeModal() { $('#modal').classList.add('hidden'); }
 $('#modalClose').onclick = closeModal;
 
 /* ---------- 通用列表视图 ---------- */
-async function renderCollection(col) {
+// SWR 缓存：再次进入同一集合时先用内存里的数据渲染（无白屏），随后后台静默校验，
+// 校验结果与缓存一致就不重绘（保留用户的勾选与滚动位置）。
+const listCache = new Map();
+function invalidateList(col) { if (col) listCache.delete(col); else listCache.clear(); }
+// 变更后刷新：先失效缓存再重绘，避免闪现旧数据
+function refreshCollection(col) { listCache.delete(col); return renderCollection(col); }
+
+async function renderCollection(col, prefetched) {
   const schema = SCHEMAS[col];
   $('#pageTitle').textContent = schema.label;
   const impBtn = (col === 'mcpservers' || col === 'skillrepos' || col === 'prompts') ? `<button class="btn" id="impBtn">从客户端导入</button>` : '';
   const syncBtn = (col === 'repos') ? `<button class="btn" id="syncAllBtn">同步全部启用仓库</button>` : '';
   $('#topActions').innerHTML = impBtn + syncBtn + `<button class="btn primary" id="newBtn">+ 新建</button>`;
-  $('#newBtn').onclick = () => openForm(col, null, () => renderCollection(col));
+  $('#newBtn').onclick = () => openForm(col, null, () => refreshCollection(col));
   if (col === 'mcpservers') $('#impBtn').onclick = openImportFromClient;
   else if (col === 'skillrepos') $('#impBtn').onclick = openImportSkillFromClient;
   else if (col === 'prompts') $('#impBtn').onclick = openImportPromptFromClient;
   else if (col === 'repos') $('#syncAllBtn').onclick = syncAllRepos;
 
   const view = $('#view');
-  // 加载状态占位：数据量大时先给反馈，避免白屏等待
-  view.innerHTML = `<div class="empty">加载中…</div>`;
-
+  // 有 enabled 字段的集合才显示批量启用/停用
+  const hasEnabled = Array.isArray(schema.fields) && schema.fields.some(f => f.key === 'enabled');
+  const seed = prefetched || listCache.get(col);
   let items;
-  try {
-    items = await api.list(col);
-  } catch (e) {
-    view.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
-    return;
+  if (seed) {
+    items = seed; // 命中缓存：直接进入渲染，无加载占位
+  } else {
+    // 首次进入：先给反馈，避免数据量大时白屏等待
+    view.innerHTML = `<div class="empty">加载中…</div>`;
+    try {
+      items = await api.list(col);
+    } catch (e) {
+      view.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
+      return;
+    }
+    listCache.set(col, items);
+  }
+  // 数据来自缓存时做一次后台校验（有变化才用新数据重绘）
+  if (seed && !prefetched) {
+    const before = seed;
+    api.list(col).then((next) => {
+      const changed = JSON.stringify(next) !== JSON.stringify(before);
+      listCache.set(col, next);
+      // 用户可能已切到别的页面，避免把内容画到错误的位置
+      if (changed && $('#pageTitle').textContent === schema.label) renderCollection(col, next);
+    }).catch(() => { /* 静默失败：继续用已渲染的缓存数据 */ });
   }
   if (!items.length) { view.innerHTML = `<div class="empty">暂无数据，点击右上角「新建」添加。</div>`; return; }
 
@@ -357,12 +386,12 @@ async function renderCollection(col) {
   };
   const bindRows = (root) => {
     root.querySelectorAll('[data-edit]').forEach(b => b.onclick = async () => {
-      try { const it = await api.get(col, b.dataset.edit); openForm(col, it, () => renderCollection(col)); }
+      try { const it = await api.get(col, b.dataset.edit); openForm(col, it, () => refreshCollection(col)); }
       catch (e) { toast('获取详情失败：' + e.message); }
     });
     root.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
-      confirmModal('确认删除', '删除后不可恢复，确定删除该条记录？', () => {
-        api.remove(col, b.dataset.del).then(() => { toast('已删除'); renderCollection(col); }).catch(e => toast('删除失败：' + e.message));
+      confirmModal('确认删除', '删除后移入回收站（可在回收站恢复或彻底删除），确定删除该条记录？', () => {
+        api.remove(col, b.dataset.del).then(() => { toast('已删除'); refreshCollection(col); }).catch(e => toast('删除失败：' + e.message));
       });
     });
     root.querySelectorAll('[data-sync]').forEach(b => b.onclick = () => syncRepo(b.dataset.sync));
@@ -380,16 +409,67 @@ async function renderCollection(col) {
     });
   };
 
-  view.innerHTML = `<div class="section-desc">集中维护 ${schema.label}，可在「共享 / 导出」中一键应用到各客户端。</div>
+  view.innerHTML = `<div class="section-desc">集中维护 ${schema.label}，可在「共享 / 导出」中一键应用到各客户端。<span id="listCount" class="hint"></span></div>
     <input id="listSearch" class="search" type="text" placeholder="搜索 ${schema.label}…" autocomplete="off"/>
-    <div class="batchbar hidden" id="batchBar"><label class="selall"><input type="checkbox" id="selAll"/> 全选</label><span id="selCount" class="hint">已选 0 项</span><span class="spacer"></span><button class="btn sm danger" id="batchDel">删除（移入回收站）</button></div>
+    <div class="batchbar hidden" id="batchBar"><label class="selall"><input type="checkbox" id="selAll"/> 全选</label><span id="selCount" class="hint">已选 0 项</span><span class="spacer"></span>${hasEnabled ? '<button class="btn sm" id="batchOn">启用</button><button class="btn sm" id="batchOff">停用</button>' : ''}<button class="btn sm danger" id="batchDel">删除（移入回收站）</button></div>
     <div class="list" id="listBox"></div>`
   const listBox = $('#listBox');
   const sel = new Set();
-  const paint = (list) => { listBox.innerHTML = list.length ? list.map(rowHtml).join('') : '<div class="empty">无匹配结果</div>'; listBox.querySelectorAll('[data-sel]').forEach(c => { c.checked = sel.has(c.dataset.sel); c.onchange = () => { c.checked ? sel.add(c.dataset.sel) : sel.delete(c.dataset.sel); updateBar(); }; }); bindRows(listBox); updateBar(); };
-  const updateBar = () => { const bar = document.getElementById('batchBar'); if (!bar) return; bar.classList.toggle('hidden', sel.size === 0); document.getElementById('selCount').textContent = '已选 ' + sel.size + ' 项'; const sa = document.getElementById('selAll'); if (sa) sa.checked = items.length > 0 && items.every(it => sel.has(it.id)); };
-  document.getElementById('selAll').onchange = () => { const on = document.getElementById('selAll').checked; items.forEach(it => on ? sel.add(it.id) : sel.delete(it.id)); paint(items); };
-  document.getElementById('batchDel').onclick = () => { if (!sel.size) return; confirmModal('确认批量删除', '将删除选中的 ' + sel.size + ' 项（可在回收站恢复），确定？', async () => { let ok = 0, fail = 0; for (const id of Array.from(sel)) { try { await api.remove(col, id); ok++; } catch (e) { fail++; } } sel.clear(); toast('已删除 ' + ok + (fail ? ('，失败 ' + fail) : '')); renderCollection(col); }); };
+  let visible = items;
+  let lastIdx = -1;
+  const paint = (list) => {
+    visible = list;
+    listBox.innerHTML = list.length ? list.map(rowHtml).join('') : '<div class="empty">无匹配结果</div>';
+    listBox.querySelectorAll('[data-sel]').forEach((c, i) => {
+      c.checked = sel.has(c.dataset.sel);
+      // Shift + 点击：整段范围选中/取消（对齐文件管理器习惯）
+      c.onclick = (ev) => {
+        if (ev.shiftKey && lastIdx >= 0) {
+          const a = Math.min(lastIdx, i), b = Math.max(lastIdx, i);
+          for (let k = a; k <= b; k++) { const it = visible[k]; if (it) { c.checked ? sel.add(it.id) : sel.delete(it.id); } }
+          lastIdx = i;
+          paint(visible);
+          return;
+        }
+        c.checked ? sel.add(c.dataset.sel) : sel.delete(c.dataset.sel);
+        lastIdx = i;
+        updateBar();
+      };
+    });
+    const lc = document.getElementById('listCount');
+    if (lc) lc.textContent = list.length === items.length ? ('共 ' + items.length + ' 项') : ('筛选 ' + list.length + ' / ' + items.length + ' 项');
+    bindRows(listBox);
+    updateBar();
+  };
+  const updateBar = () => { const bar = document.getElementById('batchBar'); if (!bar) return; bar.classList.toggle('hidden', sel.size === 0); document.getElementById('selCount').textContent = '已选 ' + sel.size + ' 项'; const sa = document.getElementById('selAll'); if (sa) sa.checked = visible.length > 0 && visible.every(it => sel.has(it.id)); };
+  // 全选只作用于「当前筛选出的」条目，避免筛选后误删未显示的记录
+  document.getElementById('selAll').onchange = () => { const on = document.getElementById('selAll').checked; visible.forEach(it => on ? sel.add(it.id) : sel.delete(it.id)); paint(visible); };
+  document.getElementById('batchDel').onclick = () => {
+    if (!sel.size) return;
+    const n = sel.size;
+    confirmModal('确认批量删除', '将删除选中的 ' + n + ' 项（可在回收站恢复），确定？', async () => {
+      try {
+        const r = await api.bulkDelete(col, Array.from(sel));
+        toast('已删除 ' + (r.removed || 0) + ' 项' + ((r.missing && r.missing.length) ? ('，' + r.missing.length + ' 项已不存在') : ''));
+      } catch (e) { toast('批量删除失败：' + e.message); }
+      sel.clear(); refreshCollection(col);
+    });
+  };
+  const batchToggle = (id, enabled) => {
+    const b = document.getElementById(id);
+    if (!b) return;
+    b.onclick = async () => {
+      if (!sel.size) return;
+      b.disabled = true;
+      try {
+        const r = await api.bulkEnabled(col, Array.from(sel), enabled);
+        toast((enabled ? '已启用 ' : '已停用 ') + (r.changed || 0) + ' 项' + ((r.missing && r.missing.length) ? ('，' + r.missing.length + ' 项已不存在') : ''));
+      } catch (e) { toast('操作失败：' + e.message); b.disabled = false; }
+      refreshCollection(col);
+    };
+  };
+  batchToggle('batchOn', true);
+  batchToggle('batchOff', false);
   paint(items);
   $('#listSearch').oninput = () => {
     const q = $('#listSearch').value.trim().toLowerCase();
@@ -404,7 +484,7 @@ async function syncRepo(id) {
   if (!r.ok) { toast('同步失败：' + (r.error || '未知')); return; }
   toast(`同步完成：新增 ${r.created}，更新 ${r.updated}` + ((r.warnings || []).length ? '；' + r.warnings.length + ' 条提示' : ''));
   if ((r.warnings || []).length) showInfoModal('同步提示 · ' + (r.name || ''), (r.warnings || []).join('\n'));
-  renderCollection('repos');
+  refreshCollection('repos');
 }
 async function syncAllRepos() {
   let repos;
@@ -421,7 +501,7 @@ async function syncAllRepos() {
   }
   toast(`全部同步完成：新增 ${totalCreated}，更新 ${totalUpdated}`);
   if (warns.length) showInfoModal('同步结果', warns.join('\n'));
-  renderCollection('repos');
+  refreshCollection('repos');
 }
 
 /* ---------- 从客户端导入 MCP 配置 ---------- */
@@ -453,7 +533,7 @@ async function openImportFromClient() {
       const created = (rr.results || []).filter(x => x.status === 'created').length;
       const updated = (rr.results || []).filter(x => x.status === 'updated').length;
       closeModal(); toast(`导入完成：新增 ${created}，更新 ${updated}`);
-      renderCollection('mcpservers');
+      refreshCollection('mcpservers');
     };
   };
 }
@@ -488,7 +568,7 @@ async function openImportSkillFromClient() {
       const updated = (rr.results || []).filter(x => x.status === 'updated').length;
       closeModal();
       toast(`导入完成：新增 ${created}，更新 ${updated}` + ((rr.warnings || []).length ? '；' + (rr.warnings || []).length + ' 个文件过大已跳过' : ''));
-      renderCollection('skillrepos');
+      refreshCollection('skillrepos');
     };
   };
 }
@@ -523,7 +603,7 @@ async function openImportPromptFromClient() {
       const updated = (rr.results || []).filter(x => x.status === 'updated').length;
       closeModal();
       toast(`导入完成：新增 ${created}，更新 ${updated}` + ((rr.warnings || []).length ? '；' + (rr.warnings || []).length + ' 个文件过大已跳过' : ''));
-      renderCollection('prompts');
+      refreshCollection('prompts');
     };
   };
 }
@@ -1043,7 +1123,12 @@ function initPalette() {
 /* ---------- 回收站：恢复已删除（墓碑）记录 ---------- */
 async function renderTrash() {
   $('#pageTitle').textContent = '回收站';
-  $('#topActions').innerHTML = '';
+  $('#topActions').innerHTML = '<button class="btn danger" id="trashPurgeAll">清空回收站</button>';
+  $('#trashPurgeAll').onclick = () => confirmModal('确认清空回收站', '将永久删除回收站内的全部墓碑（不可恢复），确定？', async () => {
+    try { const r = await api.trashPurgeAll(); invalidateList(); toast('已清空 ' + (r.total || 0) + ' 项'); }
+    catch (e) { toast('清空失败：' + e.message); }
+    renderTrash();
+  });
   const cols = Object.keys(SCHEMAS);
   let all = [];
   for (const col of cols) {
@@ -1051,14 +1136,21 @@ async function renderTrash() {
   }
   const view = $('#view');
   if (!all.length) { view.innerHTML = '<div class="empty">回收站为空。删除的记录先保留为墓碑，可在此恢复（默认 30 天后自动清除）。</div>'; return; }
-  view.innerHTML = '<div class="section-desc">各集合中已删除（墓碑）的记录。恢复后重新出现在原列表，并随同步传播。</div><div class="batchbar hidden" id="trashBar"><label class="selall"><input type="checkbox" id="selAllT"/> 全选</label><span id="trashCount" class="hint">已选 0 项</span><span class="spacer"></span><button class="btn sm" id="batchRes">恢复选中</button><button class="btn sm danger" id="batchPurge">彻底删除</button></div><div class="list">' + all.map(({ col, it }) => {
+  view.innerHTML = '<div class="section-desc">各集合中已删除（墓碑）的记录，共 ' + all.length + ' 项。恢复后重新出现在原列表，并随同步传播。</div><div class="batchbar hidden" id="trashBar"><label class="selall"><input type="checkbox" id="selAllT"/> 全选</label><span id="trashCount" class="hint">已选 0 项</span><span class="spacer"></span><button class="btn sm" id="batchRes">恢复选中</button><button class="btn sm danger" id="batchPurge">彻底删除</button></div><div class="list">' + all.map(({ col, it }) => {
     const s = SCHEMAS[col];
-    return '<div class="row"><label class="selwrap"><input type="checkbox" class="sel" data-tsel="' + col + ':' + it.id + '"/></label><div class="meta"><div class="title">' + esc(it[s.titleField]) + ' <span class="pill">' + esc(s.label) + '</span></div><div class="desc">删除于 ' + esc(new Date(it.updatedAt).toLocaleString()) + '</div></div><div class="ops"><button class="btn sm" data-res="' + col + ':' + it.id + '">恢复</button></div></div>';
+    return '<div class="row"><label class="selwrap"><input type="checkbox" class="sel" data-tsel="' + col + ':' + it.id + '"/></label><div class="meta"><div class="title">' + esc(it[s.titleField]) + ' <span class="pill">' + esc(s.label) + '</span></div><div class="desc">删除于 ' + esc(new Date(it.updatedAt).toLocaleString()) + '</div></div><div class="ops"><button class="btn sm" data-res="' + col + ':' + it.id + '">恢复</button><button class="btn sm danger" data-purge="' + col + ':' + it.id + '">彻底删除</button></div></div>';
   }).join('') + '</div>';
   view.querySelectorAll('[data-res]').forEach(b => b.onclick = async () => {
     const sv = b.dataset.res, i = sv.indexOf(':'), col = sv.slice(0, i), id = sv.slice(i + 1);
     const r = await fetch('/api/' + col + '/' + id + '/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(x => x.json()).catch(() => ({}));
-    if (r && r.id) { toast('已恢复'); renderTrash(); } else toast('恢复失败：' + (r.error || '未知'));
+    if (r && r.id) { invalidateList(); toast('已恢复'); renderTrash(); } else toast('恢复失败：' + (r.error || '未知'));
+  });
+  view.querySelectorAll('[data-purge]').forEach(b => b.onclick = () => {
+    const sv = b.dataset.purge, i = sv.indexOf(':'), col = sv.slice(0, i), id = sv.slice(i + 1);
+    confirmModal('确认彻底删除', '将永久删除该墓碑（不可恢复），确定？', async () => {
+      try { await api.purgeTombstone(col, id); invalidateList(); toast('已彻底删除'); renderTrash(); }
+      catch (e) { toast('彻底删除失败：' + e.message); }
+    });
   });
   const tsel = new Set();
   const tbar = document.getElementById('trashBar');
@@ -1066,8 +1158,30 @@ async function renderTrash() {
   const updateTBar = () => { if (!tbar) return; tbar.classList.toggle('hidden', tsel.size === 0); if (tcount) tcount.textContent = '已选 ' + tsel.size + ' 项'; const sa = document.getElementById('selAllT'); if (sa) sa.checked = all.length > 0 && all.every(({col,it}) => tsel.has(col + ':' + it.id)); };
   view.querySelectorAll('[data-tsel]').forEach(c => { c.onchange = () => { const v = c.dataset.tsel; c.checked ? tsel.add(v) : tsel.delete(v); updateTBar(); }; });
   document.getElementById('selAllT').onchange = () => { const on = document.getElementById('selAllT').checked; all.forEach(({col,it}) => { const v = col + ':' + it.id; on ? tsel.add(v) : tsel.delete(v); }); view.querySelectorAll('[data-tsel]').forEach(c => c.checked = on); updateTBar(); };
-  document.getElementById('batchRes').onclick = async () => { if (!tsel.size) return; confirmModal('确认批量恢复', '将恢复选中的 ' + tsel.size + ' 项，确定？', async () => { let ok = 0; for (const v of Array.from(tsel)) { const i = v.indexOf(':'), col = v.slice(0,i), id = v.slice(i+1); try { const r = await fetch('/api/' + col + '/' + id + '/restore', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' }).then(x=>x.json()); if (r && r.id) ok++; } catch(e){} } tsel.clear(); toast('已恢复 ' + ok); renderTrash(); }); };
-  document.getElementById('batchPurge').onclick = () => { if (!tsel.size) return; confirmModal('确认彻底删除', '将永久删除选中的 ' + tsel.size + ' 项墓碑（不可恢复），确定？', async () => { let ok = 0; for (const v of Array.from(tsel)) { const i = v.indexOf(':'), col = v.slice(0,i), id = v.slice(i+1); try { await api.purgeTombstone(col, id); ok++; } catch(e){} } tsel.clear(); toast('已彻底删除 ' + ok); renderTrash(); }); };
+  document.getElementById('batchRes').onclick = () => {
+    if (!tsel.size) return;
+    const n = tsel.size;
+    confirmModal('确认批量恢复', '将恢复选中的 ' + n + ' 项，确定？', async () => {
+      const items = Array.from(tsel).map(v => { const i = v.indexOf(':'); return { col: v.slice(0, i), id: v.slice(i + 1) }; });
+      try {
+        const r = await api.bulkRestore(items);
+        toast('已恢复 ' + (r.restored || 0) + ' 项' + ((r.missing && r.missing.length) ? ('，' + r.missing.length + ' 项已不存在') : ''));
+      } catch (e) { toast('批量恢复失败：' + e.message); }
+      tsel.clear(); invalidateList(); renderTrash(); // 恢复/彻底删除会影响原集合，连同列表缓存一起失效
+    });
+  };
+  document.getElementById('batchPurge').onclick = () => {
+    if (!tsel.size) return;
+    const n = tsel.size;
+    confirmModal('确认彻底删除', '将永久删除选中的 ' + n + ' 项墓碑（不可恢复），确定？', async () => {
+      const items = Array.from(tsel).map(v => { const i = v.indexOf(':'); return { col: v.slice(0, i), id: v.slice(i + 1) }; });
+      try {
+        const r = await api.bulkPurge(items);
+        toast('已彻底删除 ' + (r.purged || 0) + ' 项' + ((r.missing && r.missing.length) ? ('，' + r.missing.length + ' 项已不存在') : ''));
+      } catch (e) { toast('批量彻底删除失败：' + e.message); }
+      tsel.clear(); invalidateList(); renderTrash(); // 恢复/彻底删除会影响原集合，连同列表缓存一起失效
+    });
+  };
 }
 
 function boot() {
