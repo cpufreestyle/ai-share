@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const crypto = require('crypto');
-const { COLLECTIONS, DATA_DIR, purgeTombstones, list, get, create, update, remove, rewrite, exportAll, restoreAll, exportProfileBundle, importProfileBundle, importScannedServers, importScannedSkills, importScannedPrompts, collectFromClients, restore, purgeTombstone, listDeleted, removeMany, restoreMany, purgeMany, setEnabledMany, purgeAllTombstones } = require('./lib/store');
+const { COLLECTIONS, DATA_DIR, purgeTombstones, list, get, create, update, remove, rewrite, exportAll, restoreAll, exportProfileBundle, importProfileBundle, importScannedServers, importScannedSkills, importScannedPrompts, collectFromClients, restore, purgeTombstone, listDeleted, removeMany, restoreMany, purgeMany, setEnabledMany, purgeAllTombstones, listPublic, repairSecrets } = require('./lib/store');
 const { probeProvider, checkMcp } = require('./lib/probe');
 const { exportProfile, applyExport, detectClients, scanClientMcp, scanClientSkills, scanClientPrompts, expand, syncRepo } = require('./lib/export');
 const sync = require('./lib/sync');
@@ -190,6 +190,11 @@ const ROUTES = [
       const r = purgeTombstones(body && body.days != null ? body.days : 30);
       if (r.error) return sendJson(ctx.res, 400, { error: r.error });
       return sendJson(ctx.res, 200, r);
+    } },
+  // 密钥重复加密体检 / 修复：默认只扫描（apply 不为 true 时不落盘）
+  { method: 'POST', test: p => p === '/api/maintenance/repair-secrets', handler: async (ctx) => {
+      const body = (await readBody(ctx.req)) || {};
+      return sendJson(ctx.res, 200, repairSecrets({ apply: body.apply === true }));
     } },
 
   // 系统信息：供界面展示真实数据目录（避免误以为数据存放在程序目录下）
@@ -423,7 +428,7 @@ async function handleCrud(req, res, p) {
   if (req.method === 'GET') {
     if (!id) {
       // 列表接口带 ETag：重复拉取命中 304，省掉整份 JSON 的传输与解析（浏览器仍会拿到本地缓存体）
-      const payload = JSON.stringify(list(col));
+      const payload = JSON.stringify(listPublic(col));
       const etag = '"' + Buffer.byteLength(payload).toString(16) + '-' + crypto.createHash('md5').update(payload).digest('hex') + '"';
       if (req.headers['if-none-match'] === etag) {
         res.writeHead(304, { 'ETag': etag, 'Cache-Control': 'no-cache' });

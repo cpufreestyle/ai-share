@@ -774,6 +774,12 @@ async function renderBackup() {
        <button class="btn" id="bkSnapshotNow" style="margin-top:10px">立即创建快照</button>
        <div class="hint" id="bkAutoStatus" style="margin-top:8px;white-space:pre-line"></div>
      </div></div>
+     <div class="card"><div class="card-h">数据体检</div><div class="card-b">
+       <p class="hint">检查密钥字段是否被历史 bug 反复重复加密（会让数据文件异常膨胀，例如某条 API Key 涨到几 MB）。扫描只读，不会改动数据；修复前请先做个快照。</p>
+       <button class="btn" id="hcScan">扫描</button>
+       <button class="btn primary" id="hcFix" disabled>修复</button>
+       <div class="hint" id="hcResult" style="margin-top:8px;white-space:pre-line"></div>
+     </div></div>
    </div>
    <div class="card" style="margin-top:16px"><div class="card-h">本地快照（一键回滚）</div><div class="card-b">
      <div class="field"><label>回滚模式</label><select id="bkRestoreMode"><option value="merge">合并（保留快照外的记录）</option><option value="replace">覆盖（以快照完全替换）</option></select></div>
@@ -856,6 +862,35 @@ async function renderBackup() {
       renderSnaps();
     });
   };
+
+  // ---------- 数据体检：密钥重复加密自查与修复 ----------
+  const hcBytes = (b) => (b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(1) + ' MB');
+  const hcRun = async (apply) => {
+    const btn = apply ? $('#hcFix') : $('#hcScan');
+    const old = btn.textContent;
+    btn.disabled = true; btn.textContent = apply ? '修复中…' : '扫描中…';
+    let r = null;
+    try {
+      r = await fetch('/api/maintenance/repair-secrets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apply: !!apply }) }).then(x => x.json());
+    } catch (e) { /* 下面统一处理 */ }
+    btn.disabled = false; btn.textContent = old;
+    const el = $('#hcResult');
+    if (!r || r.error) { el.textContent = '检查失败：' + ((r && r.error) || '请求失败'); $('#hcFix').disabled = true; return; }
+    const lines = [];
+    let total = 0, saved = 0, unfixable = 0;
+    for (const col of Object.keys(r.report || {})) {
+      const info = r.report[col];
+      if (info.fixed) { lines.push('· ' + col + '：' + info.fixed + ' 个字段被重复加密，最多套了 ' + Math.max.apply(null, (info.samples || [{ layers: 0 }]).map(s => s.layers)) + ' 层'); total += info.fixed; saved += info.savedBytes || 0; }
+      if (info.unfixable) { lines.push('· ' + col + '：' + info.unfixable + ' 个字段无法自动解开（密钥不匹配），已跳过'); unfixable += info.unfixable; }
+    }
+    if (!total && !unfixable) { el.textContent = '检查完成：未发现重复加密的密钥字段。'; $('#hcFix').disabled = true; return; }
+    el.textContent = (apply ? '已修复 ' : '发现问题：') + total + ' 个字段' + (saved ? ('，可减少约 ' + hcBytes(saved) + ' 数据') : '') + '。\n' + lines.join('\n');
+    $('#hcFix').disabled = !(total > 0 && !apply);
+    if (apply && total) toast('已修复 ' + total + ' 个字段，减少约 ' + hcBytes(saved));
+  };
+  $('#hcScan').onclick = () => hcRun(false);
+  $('#hcFix').onclick = () => hcRun(true);
+  $('#hcFix').disabled = true;
 
   loadAuto(); renderSnaps();
 }
