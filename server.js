@@ -108,6 +108,9 @@ function pickSelected(arr, selected, key = 'name') {
   return (selected && Array.isArray(selected)) ? arr.filter(x => selected.includes(x[key])) : arr;
 }
 
+// 目录占用统计缓存：du 是 stat 密集操作，数据目录越大越慢；60s TTL 足够概览页展示用
+let duCache = { at: 0, bytes: 0 };
+
 const ROUTES = [
   // 方案导出预览 / 写入客户端
   { method: 'GET', test: p => /^\/api\/export\/([\w-]+)$/.test(p), handler: (ctx) => {
@@ -305,10 +308,11 @@ const ROUTES = [
       counts.total = COLLECTIONS.reduce((s, k) => s + (counts[k] || 0), 0);
       const sp = autobackup.autoStatus();
       const du = (p) => { let t = 0; try { for (const e of fs.readdirSync(p, { withFileTypes: true })) { const fp = path.join(p, e.name); if (e.isDirectory()) t += du(fp); else if (e.isFile()) { try { t += fs.statSync(fp).size || 0; } catch (_) {} } } } catch (_) {} return t; };
+      const duCached = () => { const now = Date.now(); if (now - duCache.at > 60000) { duCache = { at: now, bytes: du(DATA_DIR) }; } return duCache.bytes; };
       return sendJson(ctx.res, 200, {
         counts,
         dataDir: DATA_DIR,
-        storageBytes: du(DATA_DIR),
+        storageBytes: duCached(),
         vaultEnabled: vault.hasKey(),
         snapshots: { dir: sp.dir, enabled: sp.enabled, count: sp.count, lastBackupAt: sp.lastBackupAt, running: sp.running },
       });
