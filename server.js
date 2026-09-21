@@ -75,6 +75,10 @@ function readBody(req) {
   });
 }
 
+// gzip 结果缓存：静态文本资源内容基本不变，按 (路径+size+mtime) 缓存压缩产物，命中即免压
+// 上限 50 份，超出后整表清空（本应用静态文件数量小，实际不会触达）
+const gzCache = new Map();
+
 function serveStatic(req, res, urlPath) {
   const rel = urlPath === '/' ? '/index.html' : urlPath;
   const fp = path.normalize(path.join(PUBLIC, rel));
@@ -95,7 +99,17 @@ function serveStatic(req, res, urlPath) {
   const raw = fs.readFileSync(fp);
   const headers = { 'ETag': etag, 'Cache-Control': 'no-cache', 'Vary': 'Accept-Encoding' };
   let body = raw;
-  if (useGzip) { body = zlib.gzipSync(raw); headers['Content-Encoding'] = 'gzip'; }
+  if (useGzip) {
+    const ck = fp + ':' + stat.size + ':' + Math.round(stat.mtimeMs);
+    let hit = gzCache.get(ck);
+    if (!hit) {
+      hit = zlib.gzipSync(raw);
+      if (gzCache.size >= 50) gzCache.clear();
+      gzCache.set(ck, hit);
+    }
+    body = hit;
+    headers['Content-Encoding'] = 'gzip';
+  }
   send(res, 200, body, MIME[ext] || 'application/octet-stream', headers);
 }
 
