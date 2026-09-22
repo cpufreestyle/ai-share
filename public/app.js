@@ -1259,8 +1259,12 @@ async function renderOverview() {
   $('#topActions').innerHTML = '';
   $('#view').innerHTML = '<div class="empty">加载中…</div>';
   let stats;
+  let health;
   try {
-    stats = await fetch('/api/system/stats').then(r => r.json());
+    [stats, health] = await Promise.all([
+      fetch('/api/system/stats').then(r => r.json()),
+      fetch('/api/system/health-report').then(r => r.json()).catch(() => null),
+    ]);
   } catch (e) {
     $('#view').innerHTML = '<div class="empty">加载失败：' + (e && e.message) + '</div>';
     return;
@@ -1293,6 +1297,12 @@ async function renderOverview() {
         <div class="field"><label>数据占用</label><span class="hint">${fmtBytes(stats.storageBytes)}</span></div>
         <button class="btn primary" id="ovBackup" style="margin-top:6px">前往备份 / 迁移</button>
       </div></div>
+      <div class="card"><div class="card-h">资源健康度</div><div class="card-b">
+        <div class="field"><label>状态</label><span class="pill ${(health && health.total === 0) ? 'on' : ''}">${health ? (health.total === 0 ? '良好' : health.total + ' 项待关注') : '—'}</span></div>
+        <div class="field"><label>健康分</label><span>${health ? health.score : '—'} / 100</span></div>
+        ${(health && health.issues.length) ? '<div class="hint" style="margin:6px 0 10px">' + health.issues.slice(0, 5).map(i => '• [' + i.kind + '] ' + esc(i.name || i.collection) + '：' + esc(i.detail)).join('<br>') + ((health.issues.length > 5) ? '<br>… 共 ' + health.issues.length + ' 项' : '') + '</div>' : '<div class="hint" style="margin:6px 0 10px">未发现缺失字段 / 重复 / 陈旧记录</div>'}
+        <button class="btn" id="ovHealthMd" style="margin-top:6px">查看 Markdown 资源索引</button>
+      </div></div>
       <div class="card"><div class="card-h">快速操作</div><div class="card-b" style="display:flex;flex-direction:column;gap:10px">
         <button class="btn" id="ovCollect">🔍 一键采集本机资源</button>
         <button class="btn" id="ovExport">📤 共享 / 导出</button>
@@ -1303,6 +1313,7 @@ async function renderOverview() {
   $('#ovExport').onclick = () => navTo('export');
   $('#ovSync').onclick = () => navTo('sync');
   $('#ovCollect').onclick = () => $('#collectBtn').click();
+  $('#ovHealthMd').onclick = () => window.open('/api/export/markdown', '_blank');
 }
 
 /* ---------- 导航 ---------- */

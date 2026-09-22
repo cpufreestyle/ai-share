@@ -136,6 +136,8 @@ ai share/
 | POST | `/api/vault/lock` | 锁定保险库（清空内存密钥） |
 | GET | `/api/system/info` | 服务端信息：数据目录真实路径、平台、Node 版本、是否打包运行 |
 | GET | `/api/health` | 健康检查：返回 `{ok, name, version, uptime}`，无副作用，供桥接器/守护脚本/容器探针使用 |
+| GET | `/api/system/health-report` | 资源健康度报告：缺失字段 / 同名重复 / 陈旧记录 / 回收站积压，返回 `{score, issues, summary}`（`?staleDays=` 调整陈旧阈值，7–365） |
+| GET | `/api/export/markdown` | 全部资源的 Markdown 索引（不含密钥与墓碑；`?download=1` 触发下载） |
 | POST | `/api/paths/validate` | 校验路径是否存在、是否可写（写入客户端配置前自检） |
 | POST | `/api/providers/:id/test` | 连通性测试：用该端点的 baseUrl + key 请求 `/models`，失败再试根路径，返回状态码与耗时 |
 | POST | `/api/mcpservers/:id/check` | MCP 可用性检查：stdio 校验命令文件是否存在（相对命令依赖 PATH 不做静态判断），sse/http 直接探测 URL |
@@ -169,7 +171,7 @@ ai share/
 - **密钥重复加密体检 / 修复**：历史上 `seal` 不幂等，`update` / `remove` / `restore` / 同步 / 备份导入等路径会给已有密文再套一层，每保存一次字段就膨胀一截（实测某条 `apiKey` 被套 35 层、涨到 3 MB）。现已在 `crypto.isSealed` 处修掉根因，并提供 `POST /api/maintenance/repair-secrets` 与「备份 / 迁移 → 数据体检」卡片把历史多层密文还原成单层（默认只扫描，修复前建议先做快照）。
 - **写入计划（plan / diff）**：参照 `terraform plan` 与 `chezmoi diff` 的做法，「共享 / 导出」页每张卡新增「预览差异」按钮，先算出方案将向每个客户端写入什么——新增 / 修改 / 不变，以及**方案外已有的 MCP 会被保留**（apply 是合并写）——确认后再写。非法 JSON（JSONC）目标会明确标为「将跳过」，密钥一律脱敏后再展示。
 - **明文密钥扫描**：参照 `gitleaks` / `trufflehog` 的特征思路，扫描已登记客户端的配置文件、技能与提示词目录里的疑似明文密钥（OpenAI / Anthropic / Google / AWS / GitHub / GitLab / Slack / Stripe / HuggingFace / JWT / 硬编码 Bearer / 私钥块 / `apikey` 字段），并标注该值是否已被本系统收口（等于某个已登记的 API Key）。入口在「Agent 客户端」页右上角，也可用 CLI `ai-share scan-secrets`。只读，结果只带脱敏片段。
-- **命令行入口 `ai-share`**：参照 `llm` / `aichat` / `kubectx` 的本地 CLI 习惯，零依赖的 `bin/ai-share.js` 提供 `status` / `list` / `get` / `search` / `profiles` / `plan` / `apply` / `scan-secrets` / `trash` / `repair-secrets` / `env` 子命令（`-j` 输出 JSON 便于脚本消费），服务未启动会自动拉起。`npm link` 后可直接敲 `ai-share …`。
+- **命令行入口 `ai-share`**：参照 `llm` / `aichat` / `kubectx` 的本地 CLI 习惯，零依赖的 `bin/ai-share.js` 提供 `status` / `list` / `get` / `search` / `profiles` / `plan` / `apply` / `scan-secrets` / `trash` / `repair-secrets` / `env` / `health` / `markdown` 子命令（`-j` 输出 JSON 便于脚本消费），服务未启动会自动拉起。`npm link` 后可直接敲 `ai-share …`。
 - **客户端路径自动探测**：在「Agent 客户端」编辑表单中点击「自动探测」，会**实际扫描**该客户端是否已安装（检查常见可执行文件位置，Windows 检查安装目录，macOS 检查 `/Applications`，Linux 检查常见 bin 路径）以及是否已有配置文件，并自动填回对应的默认配置文件路径（含 `{APPDATA}`/`{USERPROFILE}` 占位符）。占位符跨平台可用：Windows 展开为对应系统目录，macOS 的 `{APPDATA}`/`{LOCALAPPDATA}` 映射到 `~/Library/Application Support`，Linux 遵循 XDG 惯例（`~/.config` / `~/.local/share`）。客户端列表还会显示实测出来的「已安装 / 未安装」与「已有配置文件」徽标，避免把「已登记」误当成「已装好」。
 - **从客户端反向导入 MCP 配置**：在「MCP 服务器」页点击「从客户端导入」，选择某个已安装客户端，工具会**直接读取该客户端电脑上的真实配置文件**（如 `claude_desktop_config.json`、`.cursor/mcp.json`），解析其中的 `mcpServers` 并清单预览、可勾选，确认后一键搬入本系统统一管理。同名服务器自动更新、不同名则新增，方便把散落在各客户端的 MCP 配置集中收口。
 - **从客户端汇总 Skill 到仓库**：在「Skill 仓库」页点击「从客户端导入」，选择客户端后工具会**逐个扫描其本地 skill 目录**（如 `~/.codebuddy/skills`、`~/.claude/skills`），解析每个 skill 文件夹中的 `SKILL.md`（读取 `name` / `description` frontmatter），预览并勾选后一键登记进「Skill 仓库」（以本地仓库形式，路径即 skill 文件夹）。按文件夹路径合并，避免重复。

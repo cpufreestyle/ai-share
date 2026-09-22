@@ -16,6 +16,8 @@
 - **数据目录可视化**：新增 `GET /api/system/info`，侧边栏底部显示真实数据目录，支持用 `AI_SHARE_DATA_DIR` 覆盖。
 - **MCP 桥接器**：`mcp-bridge.js`（零依赖 stdio MCP 服务端）把资源暴露为 `aishare_list` / `aishare_search` / `aishare_apply_profile` 等工具，供任意兼容 MCP 的客户端调用；服务未启动时自动拉起一次。
 - **静态资源 gzip**：HTML / JS / CSS 等按 `Accept-Encoding` 协商压缩返回，ETag 加 `-gz` 后缀并带 `Vary: Accept-Encoding`。
+- **资源健康度报告**：新增 `GET /api/system/health-report` 与概览页「资源健康度」卡片、CLI `ai-share health`——检测缺失字段、同集合同名重复、长期未更新（默认 90 天，`?staleDays=` 可调）与回收站积压，输出健康分与逐项明细；删除记录只计入积压不参与字段检查。
+- **Markdown 资源索引**：新增 `GET /api/export/markdown` 与 CLI `ai-share markdown`——把全部资源排成可分享/引用的 Markdown 目录（不含密钥与墓碑，`?download=1` 触发下载）。
 - **健康检查端点**：新增 `GET /api/health`，返回 `{ok, name, version, uptime}`，无副作用，供 MCP 桥接器、守护脚本或容器探针判断服务存活。
 - **密钥字段显隐与一键复制**：API 端点编辑表单中的 API Key 支持「显示 / 隐藏」切换与「复制」按钮，切换客户端类型重渲染后仍可用；剪贴板不可用时退化为全选提示。
 - **桥接器跨集合搜索**：`aishare_search` 的 `collection` 参数改为可选——不传时跨全部集合搜索并返回 `[{collection, item}]`，方便 Agent 一次找全相关资源。

@@ -10,6 +10,8 @@
 //   ai-share apply <方案>                 把方案写入客户端配置
 //   ai-share scan-secrets                扫描本地配置里的明文密钥
 //   ai-share trash                       查看回收站
+//   ai-share health [staleDays]          资源健康度报告（缺失/重复/陈旧/回收站积压）
+//   ai-share markdown [> out.md]         输出全部资源的 Markdown 索引
 //   ai-share repair-secrets [--apply]    密钥多层加密体检 / 修复
 //   ai-share env <端点>                   输出该端点的 shell export 片段
 // 零依赖，Node >= 20。默认连 127.0.0.1:4737，可用 AI_SHARE_URL / PORT 覆盖。
@@ -262,6 +264,28 @@ async function main() {
       for (const s of i.samples || []) console.log('   ' + s.id + ' 字段 ' + s.field + ' 套了 ' + s.layers + ' 层，当前 ' + (s.before / 1024).toFixed(1) + ' KB');
     }
     if (!r.apply) console.log(dim('以上仅为扫描结果（未改动任何数据）。加 --apply 执行修复，建议先做快照。'));
+    return;
+  }
+
+  if (cmd === 'health') {
+    await ensureServer();
+    const days = parseInt(rest[0], 10);
+    const q = Number.isFinite(days) ? ('?staleDays=' + days) : '';
+    const r = await req('GET', '/api/system/health-report' + q);
+    if (JSON_MODE) return console.log(JSON.stringify(r, null, 2));
+    const icon = (k) => ({ 'missing-field': '⚠ 缺字段', 'duplicate': '⧉ 重复', 'stale': '◷ 陈旧', 'tombstones': '♻ 回收站' }[k] || k);
+    console.log('健康分 ' + r.score + '/100 · ' + r.summary);
+    for (const i of r.issues) console.log('  [' + icon(i.kind) + '] ' + pad(i.collection, 12) + ' ' + pad(i.name, 24) + ' ' + dim(i.detail));
+    if (!r.issues.length) console.log(dim('未发现问题'));
+    return;
+  }
+
+  if (cmd === 'markdown') {
+    await ensureServer();
+    const res = await fetch(BASE + '/api/export/markdown', { headers: { 'Accept': 'text/markdown' } });
+    const md = await res.text();
+    process.stdout.write(md);
+    if (process.stdout.isTTY) console.log(dim('\n# 提示：重定向保存，如  ai-share markdown > ai-index.md'));
     return;
   }
 
