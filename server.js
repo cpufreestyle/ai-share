@@ -4,7 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const crypto = require('crypto');
-const { COLLECTIONS, DATA_DIR, purgeTombstones, list, get, create, update, remove, rewrite, exportAll, restoreAll, exportProfileBundle, importProfileBundle, importScannedServers, importScannedSkills, importScannedPrompts, collectFromClients, restore, purgeTombstone, listDeleted, removeMany, restoreMany, purgeMany, setEnabledMany, purgeAllTombstones, listPublic, repairSecrets } = require('./lib/store');
+const { COLLECTIONS, DATA_DIR, purgeTombstones, list, get, create, update, remove, rewrite, exportAll, restoreAll, exportProfileBundle, importProfileBundle, importScannedServers, importScannedSkills, importScannedPrompts, collectFromClients, restore, purgeTombstone, listDeleted, removeMany, restoreMany, purgeMany, setEnabledMany, purgeAllTombstones, listPublic, repairSecrets, listRaw } = require('./lib/store');
+const { healthReport, markdownIndex } = require('./lib/insights');
 const { probeProvider, checkMcp } = require('./lib/probe');
 const { exportProfile, applyExport, planExport, detectClients, scanClientMcp, scanClientSkills, scanClientPrompts, expand, syncRepo } = require('./lib/export');
 const { scanSecrets } = require('./lib/secretscan');
@@ -126,6 +127,19 @@ function pickSelected(arr, selected, key = 'name') {
 let duCache = { at: 0, bytes: 0 };
 
 const ROUTES = [
+  // Markdown 资源索引（可分享/引用；可选 ?download=1 触发下载）
+  // 注意：必须先于 /api/export/:id 注册，否则 markdown 会被当作 profileId 匹配走 404
+  { method: 'GET', test: p => p === '/api/export/markdown', handler: (ctx) => {
+      const md = markdownIndex(exportAll(), {});
+      const q = new URL(ctx.req.url, 'http://localhost').searchParams;
+      // 自行结束响应后必须返回 undefined：res.end() 的返回值是 res 本身（循环引用），
+      // 若被 ROUTES 循环二次 send 会触发 Converting circular structure → 进程崩溃
+      ctx.res.writeHead(200, q.get('download') === '1'
+        ? { 'Content-Type': 'text/markdown; charset=utf-8', 'Content-Disposition': 'attachment; filename="ai-share-index.md"' }
+        : { 'Content-Type': 'text/markdown; charset=utf-8' });
+      ctx.res.end(md);
+    } },
+
   // 方案导出预览 / 写入客户端
   { method: 'GET', test: p => /^\/api\/export\/([\w-]+)$/.test(p), handler: (ctx) => {
       const m = ctx.p.match(/^\/api\/export\/([\w-]+)$/);
@@ -223,6 +237,16 @@ const ROUTES = [
   { method: 'POST', test: p => p === '/api/security/scan-secrets', handler: async (ctx) => {
       const body = (await readBody(ctx.req)) || {};
       return sendJson(ctx.res, 200, scanSecrets(body));
+    } },
+
+  // 资源健康度报告（只读分析：缺失字段 / 重复 / 陈旧 / 墓碑积压）
+  { method: 'GET', test: p => p === '/api/system/health-report', handler: (ctx) => {
+      const q = new URL(ctx.req.url, 'http://localhost').searchParams;
+      const staleDays = Math.max(7, Math.min(365, parseInt(q.get('staleDays'), 10) || 90));
+      // 墓碑在 exportAll 中被隐藏，但「回收站积压」是健康度的一部分 → 用 listRaw 组装
+      const raw = {};
+      for (const k of COLLECTIONS) raw[k] = listRaw(k);
+      return sendJson(ctx.res, 200, healthReport({ collections: raw }, { staleDays }));
     } },
 
   // 客户端自动探测
