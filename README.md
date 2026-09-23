@@ -70,7 +70,7 @@ Linux（systemd，推荐）：`systemctl --user start ai-share` / `systemctl --u
 ```bash
 npm start        # 启动服务（等价 node server.js）
 npm run lint     # 批量语法检查 server.js / lib/*.js / public/app.js
-npm test         # 运行全部隔离测试（16 个套件 / 347 项，见 package.json 的 test 清单）
+npm test         # 运行全部隔离测试（17 个套件 / 365 项，见 package.json 的 test 清单）
 ```
 
 - **单测隔离**：`npm test` 通过环境变量 `AI_SHARE_DATA_DIR` 把数据目录指向临时目录，**不会触碰真实 `data/`**，测试结束自动清理。
