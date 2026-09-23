@@ -324,6 +324,38 @@ function openForm(col, item, onSave) {
     const p = isNew ? api.create(col, out) : api.update(col, item.id, out);
     p.then(() => { closeModal(); onSave(); toast(isNew ? '已创建' : '已保存'); }).catch(e => toast('保存失败：' + e.message));
   };
+
+  if (!isNew) {
+    const relatedTitle = document.createElement('div');
+    relatedTitle.className = 'card-h';
+    relatedTitle.textContent = '相似资源';
+    const relatedBody = document.createElement('div');
+    relatedBody.className = 'card-b';
+    relatedBody.innerHTML = '<div id="relatedBox" class="empty">加载中…</div>';
+    body.appendChild(relatedTitle);
+    body.appendChild(relatedBody);
+    const loadRelated = async () => {
+      const box = document.getElementById('relatedBox');
+      if (!box) return;
+      try {
+        const q = encodeURIComponent(cur[schema.titleField] || '');
+        const r = await fetch('/api/system/semantic-search?q=' + q + '&col=' + col + '&semantic=1').then(r => r.json());
+        const items = (r.items || []).filter(x => x.item && x.item.id !== item.id).slice(0, 3);
+        if (!items.length) { box.innerHTML = '未发现相似资源'; return; }
+        box.innerHTML = '<div class="list">' + items.map(x => {
+          const s = SCHEMAS[x.collection];
+          return '<div class="row" data-col="' + x.collection + '" data-id="' + x.item.id + '"><div class="meta"><div class="title">' + esc(x.item[s.titleField]) + ' <span class="pill">' + esc(s.label) + '</span></div><div class="desc">' + esc(String(x.item[s.descField === '_desc' ? '_desc' : s.descField] || '')) + '</div></div><div class="ops"><button class="btn sm">打开</button></div></div>';
+        }).join('') + '</div>';
+        box.querySelectorAll('.row').forEach(row => row.onclick = () => {
+          closeModal();
+          setTimeout(() => openForm(row.dataset.col, { id: row.dataset.id }, () => renderCollection(col)), 0);
+        });
+      } catch (e) {
+        box.innerHTML = '相似资源加载失败';
+      }
+    };
+    loadRelated();
+  }
 }
 function closeModal() { $('#modal').classList.add('hidden'); }
 $('#modalClose').onclick = closeModal;
@@ -1410,7 +1442,7 @@ function initPalette() {
   const el = document.createElement('div');
   el.id = 'palette';
   el.className = 'modal hidden';
-  el.innerHTML = '<div class="modal-box" style="max-width:660px"><div class="modal-head"><span>全局搜索</span><button id="palClose">✕</button></div><div class="modal-body"><input id="palInput" class="search" style="max-width:none" placeholder="搜索任意资源（名称 / 描述 / 标签）…" autocomplete="off"/><div id="palResults" class="list" style="margin-top:10px"></div></div></div>';
+  el.innerHTML = '<div class="modal-box" style="max-width:660px"><div class="modal-head"><span>全局搜索</span><button id="palClose">✕</button></div><div class="modal-body"><input id="palInput" class="search" style="max-width:none" placeholder="搜索任意资源（名称 / 描述 / 标签）…" autocomplete="off"/><label class="pill" style="margin-left:8px"><input id="palSemantic" type="checkbox"/> 语义搜索</label><div id="palResults" class="list" style="margin-top:10px"></div></div></div>';
   document.body.appendChild(el);
   const input = el.querySelector('#palInput');
   const results = el.querySelector('#palResults');
@@ -1432,13 +1464,21 @@ function initPalette() {
     }).join('');
     results.querySelectorAll('.pal-item').forEach(r => r.onclick = () => activate(r.dataset.col, r.dataset.id));
   };
-  const render = (q) => {
+  const render = async (q) => {
     q = (q || '').trim().toLowerCase();
-    const matched = q ? items.filter(({ col, it }) => {
+    const semantic = document.getElementById('palSemantic').checked;
+    let matched = [];
+    if (matched.length === 0 && semantic && q) {
+      try { const r = await fetch('/api/system/semantic-search?q=' + encodeURIComponent(q) + '&semantic=1').then(r => r.json()); matched = (r.items || []).map(x => ({ col: x.collection, it: x.item })); }
+      catch (e) {}
+    }
+    const textMatch = q ? items.filter(({ col, it }) => {
       const s = SCHEMAS[col];
       const hay = [it[s.titleField], it[s.descField === '_desc' ? '_desc' : s.descField], (it[s.tagsField] || []).join(' ')].join(' ').toLowerCase();
       return hay.includes(q);
-    }) : items.slice(0, 50);
+    });
+    if (!matched.length) matched = textMatch;
+  }
     active = 0;
     paint(matched.slice(0, 50));
   };

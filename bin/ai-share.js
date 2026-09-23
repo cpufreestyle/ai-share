@@ -5,6 +5,7 @@
 //   ai-share list <collection>           列出条目（id / 名称 / 启用状态）
 //   ai-share get <col> <id|名称>          输出单条 JSON（本机接口含明文密钥，注意保管）
 //   ai-share search <关键字> [collection] 跨集合搜索
+//   ai-share related <col> <id|名称>       查找相似资源（语义搜索）
 //   ai-share profiles                    列出方案
 //   ai-share plan <方案>                  预览将写入客户端的内容（不落盘）
 //   ai-share apply <方案>                 把方案写入客户端配置
@@ -194,6 +195,28 @@ async function main() {
     if (JSON_MODE) return console.log(JSON.stringify(out, null, 2));
     if (!out.length) return console.log(dim('无匹配'));
     for (const { collection, item } of out) console.log(pad(collection, 14) + pad(item.id, 18) + titleOf(item));
+    console.log(dim('共 ' + out.length + ' 条'));
+    return;
+  }
+
+  if (cmd === 'related') {
+    const [col, key] = rest;
+    if (!COLS.includes(col) || !key) throw new Error('用法： ai-share related <collection> <id|名称>');
+    await ensureServer();
+    let item = null;
+    try { item = await req('GET', '/api/' + col + '/' + encodeURIComponent(key)); } catch (e) { /* 按名称再试 */ }
+    if (!item || !item.id) {
+      const items = await req('GET', '/api/' + col);
+      const k = String(key).toLowerCase();
+      const m = items.filter((x) => String(titleOf(x)).toLowerCase() === k);
+      if (m.length !== 1) throw new Error(m.length ? '名称不唯一，请用 id' : '找不到记录：' + key);
+      item = m[0];
+    }
+    const r = await req('GET', '/api/system/semantic-search?q=' + encodeURIComponent(titleOf(item)) + '&col=' + col + '&semantic=1');
+    const out = (r.items || []).filter(x => x.item && x.item.id !== item.id).slice(0, 10);
+    if (JSON_MODE) return console.log(JSON.stringify(out, null, 2));
+    if (!out.length) return console.log(dim('无相似资源'));
+    for (const x of out) console.log(pad(x.collection, 14) + pad(x.item.id, 18) + titleOf(x.item));
     console.log(dim('共 ' + out.length + ' 条'));
     return;
   }

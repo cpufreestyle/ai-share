@@ -239,3 +239,5 @@ AI_SHARE_URL=http://127.0.0.1:4737 node mcp-bridge.js   # 端口/地址不同时
 | `aishare_detect_clients` | 探测本机已安装的 AI 客户端及其配置文件路径 |
 
 桥接器只与本机 REST API 通信（默认 `127.0.0.1:4737`），不会把数据发往外部。服务未启动时它会自动拉起一次（需 `start.sh`，即 Linux / macOS / WSL 环境）。
+
+- **语义搜索**：结合 [Ollama](https://ollama.com/) 本地 embedding 模型，支持按语义模糊匹配资源（默认关闭，全局搜索可手动开启；环境变量 `OLLAMA_URL` / `OLLAMA_EMBEDDING_MODEL` 可自定义模型）。

@@ -33,6 +33,16 @@ const PORT = process.env.PORT || 4737;
 const HOST = process.env.HOST || '127.0.0.1';
 const PUBLIC = path.join(READ_ROOT, 'public');
 
+const SCHEMAS = {
+  providers: { titleField: 'name', descField: 'baseUrl', tagsField: 'models', idField: 'name' },
+  prompts: { titleField: 'name', descField: 'content', tagsField: 'tags', idField: 'name' },
+  mcpservers: { titleField: 'name', descField: '_desc', tagsField: 'tags', idField: 'name' },
+  skillrepos: { titleField: 'name', descField: 'description', tagsField: 'tags', idField: 'name' },
+  clients: { titleField: 'name', descField: 'configPath', tagsField: 'tags', idField: 'name' },
+  repos: { titleField: 'name', descField: '_desc', tagsField: 'tags', idField: 'name' },
+};
+
+
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
   '.json': 'application/json', '.svg': 'image/svg+xml', '.ico': 'image/x-icon'
@@ -129,6 +139,32 @@ let duCache = { at: 0, bytes: 0 };
 const ROUTES = [
   // Markdown 资源索引（可分享/引用；可选 ?download=1 触发下载）
   // 注意：必须先于 /api/export/:id 注册，否则 markdown 会被当作 profileId 匹配走 404
+  { method: 'GET', test: p => p.startsWith('/api/system/semantic-search'), handler: async (ctx) => {
+      const q = new URL(ctx.req.url, 'http://localhost').searchParams;
+      const query = (q.get('q') || '').trim();
+      if (!query) return sendJson(ctx.res, 400, { error: '缺少 q 参数' });
+      const col = q.get('col') || '';
+      const semantic = String(q.get('semantic') || '0') === '1';
+      const all = exportAll();
+      const cols = (all && all.collections) || {};
+      const out = [];
+      const targetCols = col && COLLECTIONS.includes(col) ? [col] : Object.keys(SCHEMAS).filter(c => c !== 'profiles');
+      for (const c of targetCols) {
+        const items = (cols[c] || []).filter(x => x && !x._deleted);
+        if (!items.length) continue;
+        let matched = [];
+        if (semantic) {
+          try { matched = await require('./lib/semantic').semanticSearch(items, SCHEMAS[c], query); }
+          catch (e) { return sendJson(ctx.res, 200, { query, semantic: true, mode: 'text', total: 0, items: [], warning: '语义搜索不可用：' + e.message }); }
+        } else {
+          const k = query.toLowerCase();
+          matched = items.filter(it => JSON.stringify(it).toLowerCase().includes(k)).map(it => ({ item: it, score: 0 }));
+        }
+        matched.forEach(m => out.push({ collection: c, item: m.item, score: m.score }));
+      }
+      out.sort((a, b) => (b.score || 0) - (a.score || 0));
+      return sendJson(ctx.res, 200, { query, semantic, total: out.length, items: out.slice(0, 50) });
+    } },
   { method: 'GET', test: p => p === '/api/export/markdown', handler: (ctx) => {
       const md = markdownIndex(exportAll(), {});
       const q = new URL(ctx.req.url, 'http://localhost').searchParams;

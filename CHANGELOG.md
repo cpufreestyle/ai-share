@@ -9,6 +9,10 @@
 
 ### 新增
 
+- **语义搜索（实验性）**：结合 [Ollama](https://ollama.com/) 本地 embedding 模型，新增 `GET /api/system/semantic-search` 与全局搜索「语义搜索」开关，CLI 支持 `ai-share search <关键字> --semantic`，可按语义相似度匹配资源；Ollama 不可用时自动回退到文本搜索。
+
+### 新增
+
 - **全局搜索 / 命令面板**：`Ctrl` / `Cmd + K` 跨集合检索资源并直达条目（`public/app.js` 的 `initPalette`）。
 - **Provider / MCP 连通性自检**：新增 `lib/probe.js` 与 `POST /api/providers/:id/test`、`POST /api/mcpservers/:id/check`，列表行可直接测试连通性并返回状态码与耗时。
 - **回收站与误删恢复**：删除改为墓碑记录，新增 `GET /api/:col/deleted` 与 `POST /api/:col/:id/restore`，侧边栏「回收站」页可查看并还原。

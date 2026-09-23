@@ -18,6 +18,7 @@ process.env.AI_SHARE_NO_OPEN = '1';
 const ROOT = path.join(__dirname, '..');
 const CLI = path.join(ROOT, 'bin', 'ai-share.js');
 const server = require('../server');
+const store = require('../lib/store');
 
 let passed = 0;
 function ok(name, cond) { assert.ok(cond, name); console.log('  ✓ ' + name); passed++; }
@@ -61,6 +62,11 @@ server.listen(0, '127.0.0.1', async () => {
 
     r = await run(['status'], url);
     ok('status 输出各集合概览', r.status === 0 && r.stdout.indexOf('providers') !== -1 && r.stdout.indexOf('数据目录') !== -1);
+
+    const pid = store.create('providers', { name: 'related-provider', baseUrl: 'https://related.test' });
+    r = await run(['related', 'providers', pid.id], url);
+    ok('related 对有效 id 返回 0', r.status === 0);
+    ok('related 输出相似资源或空提示', r.stdout.indexOf('共') !== -1 || r.stdout.indexOf('无相似资源') !== -1);
 
     // 服务离线时的报错路径：指向一个不可能有服务的端口（且禁用自动拉起）
     r = await run(['status'], 'http://127.0.0.1:1');
