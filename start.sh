@@ -9,6 +9,10 @@
 set -eu
 
 cd "$(dirname "$0")"
+if systemctl --user is-active --quiet ai-share.service 2>/dev/null; then
+  echo "[ai-share] 服务已由 systemd 管控，请使用 systemctl --user start|stop ai-share（start.sh 已跳过）" >&2
+  exit 0
+fi
 
 PORT="${PORT:-4737}"
 

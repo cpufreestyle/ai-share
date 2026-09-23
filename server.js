@@ -631,6 +631,12 @@ const server = http.createServer(async (req, res) => {
 });
 
 function startServer() {
+  server.on('error', (err) => {
+    if (err && err.code === 'EADDRINUSE') {
+      console.error('[server] 端口已被占用（' + HOST + ':' + PORT + '），请先停止占用端口的进程');
+      process.exit(1);
+    }
+  });
   server.listen(PORT, HOST, () => {
     const shown = HOST === '0.0.0.0' ? '0.0.0.0（已对局域网开放，注意服务无鉴权）' : HOST;
     console.log(`AI Share 已启动: http://localhost:${PORT}  (监听 ${shown}:${PORT})`);
