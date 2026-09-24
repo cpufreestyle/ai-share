@@ -12,7 +12,6 @@ dist/*.log
 dist/*.err
 dist/portable/
 dist/builder/
-node_modules/
 package-lock.json
 # 本地发布/排查辅助脚本（含凭据，禁止入库）
 dist/*.ps1
