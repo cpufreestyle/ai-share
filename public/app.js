@@ -359,6 +359,10 @@ function openForm(col, item, onSave) {
 }
 function closeModal() { $('#modal').classList.add('hidden'); }
 $('#modalClose').onclick = closeModal;
+$('#modal').onclick = (e) => { if (e.target === $('#modal')) closeModal(); };
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('#modal').classList.contains('hidden')) closeModal();
+});
 
 /* ---------- 通用列表视图 ---------- */
 // SWR 缓存：再次进入同一集合时先用内存里的数据渲染（无白屏），随后后台静默校验，
