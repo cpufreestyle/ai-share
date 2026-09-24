@@ -394,111 +394,6 @@ async function renderCollection(col, prefetched) {
     lines.push('', '提示：未登记的密钥建议收口到「API 端点」，避免散落在各配置文件里。');
     showInfoModal('明文密钥扫描', lines.join('\n'));
   };
-  if (col === 'clients') $('#scanSec').onclick = async () => {
-    toast('正在扫描本地配置…');
-    const r = await api.scanSecrets().catch(e => ({ error: e.message }));
-    if (r.error) return toast('扫描失败：' + r.error);
-    const lines = ['扫描 ' + r.scanned + ' 个文件：疑似明文密钥 ' + r.summary.total + ' 处'
-      + '（已收口 ' + r.summary.inVault + ' / 未登记 ' + r.summary.unknown + '），涉及 ' + r.summary.files + ' 个文件', ''];
-    if (!r.summary.total) lines.push('未发现明文密钥。');
-    const shown = r.findings.slice(0, 60);
-    for (const f of shown) lines.push('· ' + f.file + ':' + f.line + '  [' + f.name + ']  ' + f.masked + (f.inVault ? '（已收口）' : '（未登记）'));
-    if (r.findings.length > shown.length) lines.push('… 其余 ' + (r.findings.length - shown.length) + ' 条略（可通过 /api/security/scan-secrets 获取全部）');
-    for (const s of r.skipped || []) lines.push('跳过 ' + s.file + '：' + s.reason);
-    if (r.truncated) lines.push('（结果被截断：文件数或命中数达到上限）');
-    lines.push('', '提示：未登记的密钥建议收口到「API 端点」，避免散落在各配置文件里。');
-    showInfoModal('明文密钥扫描', lines.join('\n'));
-  };
-  if (col === 'clients') $('#scanSec').onclick = async () => {
-    toast('正在扫描本地配置…');
-    const r = await api.scanSecrets().catch(e => ({ error: e.message }));
-    if (r.error) return toast('扫描失败：' + r.error);
-    const lines = ['扫描 ' + r.scanned + ' 个文件：疑似明文密钥 ' + r.summary.total + ' 处'
-      + '（已收口 ' + r.summary.inVault + ' / 未登记 ' + r.summary.unknown + '），涉及 ' + r.summary.files + ' 个文件', ''];
-    if (!r.summary.total) lines.push('未发现明文密钥。');
-    const shown = r.findings.slice(0, 60);
-    for (const f of shown) lines.push('· ' + f.file + ':' + f.line + '  [' + f.name + ']  ' + f.masked + (f.inVault ? '（已收口）' : '（未登记）'));
-    if (r.findings.length > shown.length) lines.push('… 其余 ' + (r.findings.length - shown.length) + ' 条略（可通过 /api/security/scan-secrets 获取全部）');
-    for (const s of r.skipped || []) lines.push('跳过 ' + s.file + '：' + s.reason);
-    if (r.truncated) lines.push('（结果被截断：文件数或命中数达到上限）');
-    lines.push('', '提示：未登记的密钥建议收口到「API 端点」，避免散落在各配置文件里。');
-    showInfoModal('明文密钥扫描', lines.join('\n'));
-  };
-  if (col === 'clients') $('#scanSec').onclick = async () => {
-    toast('正在扫描本地配置…');
-    const r = await api.scanSecrets().catch(e => ({ error: e.message }));
-    if (r.error) return toast('扫描失败：' + r.error);
-    const lines = ['扫描 ' + r.scanned + ' 个文件：疑似明文密钥 ' + r.summary.total + ' 处'
-      + '（已收口 ' + r.summary.inVault + ' / 未登记 ' + r.summary.unknown + '），涉及 ' + r.summary.files + ' 个文件', ''];
-    if (!r.summary.total) lines.push('未发现明文密钥。');
-    const shown = r.findings.slice(0, 60);
-    for (const f of shown) lines.push('· ' + f.file + ':' + f.line + '  [' + f.name + ']  ' + f.masked + (f.inVault ? '（已收口）' : '（未登记）'));
-    if (r.findings.length > shown.length) lines.push('… 其余 ' + (r.findings.length - shown.length) + ' 条略（可通过 /api/security/scan-secrets 获取全部）');
-    for (const s of r.skipped || []) lines.push('跳过 ' + s.file + '：' + s.reason);
-    if (r.truncated) lines.push('（结果被截断：文件数或命中数达到上限）');
-    lines.push('', '提示：未登记的密钥建议收口到「API 端点」，避免散落在各配置文件里。');
-    showInfoModal('明文密钥扫描', lines.join('\n'));
-  };
-  if (col === 'clients') $('#scanSec').onclick = async () => {
-    toast('正在扫描本地配置…');
-    const r = await api.scanSecrets().catch(e => ({ error: e.message }));
-    if (r.error) return toast('扫描失败：' + r.error);
-    const lines = ['扫描 ' + r.scanned + ' 个文件：疑似明文密钥 ' + r.summary.total + ' 处'
-      + '（已收口 ' + r.summary.inVault + ' / 未登记 ' + r.summary.unknown + '），涉及 ' + r.summary.files + ' 个文件', ''];
-    if (!r.summary.total) lines.push('未发现明文密钥。');
-    const shown = r.findings.slice(0, 60);
-    for (const f of shown) lines.push('· ' + f.file + ':' + f.line + '  [' + f.name + ']  ' + f.masked + (f.inVault ? '（已收口）' : '（未登记）'));
-    if (r.findings.length > shown.length) lines.push('… 其余 ' + (r.findings.length - shown.length) + ' 条略（可通过 /api/security/scan-secrets 获取全部）');
-    for (const s of r.skipped || []) lines.push('跳过 ' + s.file + '：' + s.reason);
-    if (r.truncated) lines.push('（结果被截断：文件数或命中数达到上限）');
-    lines.push('', '提示：未登记的密钥建议收口到「API 端点」，避免散落在各配置文件里。');
-    showInfoModal('明文密钥扫描', lines.join('\n'));
-  };
-  if (col === 'clients') $('#scanSec').onclick = async () => {
-    toast('正在扫描本地配置…');
-    const r = await api.scanSecrets().catch(e => ({ error: e.message }));
-    if (r.error) return toast('扫描失败：' + r.error);
-    const lines = ['扫描 ' + r.scanned + ' 个文件：疑似明文密钥 ' + r.summary.total + ' 处'
-      + '（已收口 ' + r.summary.inVault + ' / 未登记 ' + r.summary.unknown + '），涉及 ' + r.summary.files + ' 个文件', ''];
-    if (!r.summary.total) lines.push('未发现明文密钥。');
-    const shown = r.findings.slice(0, 60);
-    for (const f of shown) lines.push('· ' + f.file + ':' + f.line + '  [' + f.name + ']  ' + f.masked + (f.inVault ? '（已收口）' : '（未登记）'));
-    if (r.findings.length > shown.length) lines.push('… 其余 ' + (r.findings.length - shown.length) + ' 条略（可通过 /api/security/scan-secrets 获取全部）');
-    for (const s of r.skipped || []) lines.push('跳过 ' + s.file + '：' + s.reason);
-    if (r.truncated) lines.push('（结果被截断：文件数或命中数达到上限）');
-    lines.push('', '提示：未登记的密钥建议收口到「API 端点」，避免散落在各配置文件里。');
-    showInfoModal('明文密钥扫描', lines.join('\n'));
-  };
-  if (col === 'clients') $('#scanSec').onclick = async () => {
-    toast('正在扫描本地配置…');
-    const r = await api.scanSecrets().catch(e => ({ error: e.message }));
-    if (r.error) return toast('扫描失败：' + r.error);
-    const lines = ['扫描 ' + r.scanned + ' 个文件：疑似明文密钥 ' + r.summary.total + ' 处'
-      + '（已收口 ' + r.summary.inVault + ' / 未登记 ' + r.summary.unknown + '），涉及 ' + r.summary.files + ' 个文件', ''];
-    if (!r.summary.total) lines.push('未发现明文密钥。');
-    const shown = r.findings.slice(0, 60);
-    for (const f of shown) lines.push('· ' + f.file + ':' + f.line + '  [' + f.name + ']  ' + f.masked + (f.inVault ? '（已收口）' : '（未登记）'));
-    if (r.findings.length > shown.length) lines.push('… 其余 ' + (r.findings.length - shown.length) + ' 条略（可通过 /api/security/scan-secrets 获取全部）');
-    for (const s of r.skipped || []) lines.push('跳过 ' + s.file + '：' + s.reason);
-    if (r.truncated) lines.push('（结果被截断：文件数或命中数达到上限）');
-    lines.push('', '提示：未登记的密钥建议收口到「API 端点」，避免散落在各配置文件里。');
-    showInfoModal('明文密钥扫描', lines.join('\n'));
-  };
-  if (col === 'clients') $('#scanSec').onclick = async () => {
-    toast('正在扫描本地配置…');
-    const r = await api.scanSecrets().catch(e => ({ error: e.message }));
-    if (r.error) return toast('扫描失败：' + r.error);
-    const lines = ['扫描 ' + r.scanned + ' 个文件：疑似明文密钥 ' + r.summary.total + ' 处'
-      + '（已收口 ' + r.summary.inVault + ' / 未登记 ' + r.summary.unknown + '），涉及 ' + r.summary.files + ' 个文件', ''];
-    if (!r.summary.total) lines.push('未发现明文密钥。');
-    const shown = r.findings.slice(0, 60);
-    for (const f of shown) lines.push('· ' + f.file + ':' + f.line + '  [' + f.name + ']  ' + f.masked + (f.inVault ? '（已收口）' : '（未登记）'));
-    if (r.findings.length > shown.length) lines.push('… 其余 ' + (r.findings.length - shown.length) + ' 条略（可通过 /api/security/scan-secrets 获取全部）');
-    for (const s of r.skipped || []) lines.push('跳过 ' + s.file + '：' + s.reason);
-    if (r.truncated) lines.push('（结果被截断：文件数或命中数达到上限）');
-    lines.push('', '提示：未登记的密钥建议收口到「API 端点」，避免散落在各配置文件里。');
-    showInfoModal('明文密钥扫描', lines.join('\n'));
-  };
 
   const view = $('#view');
   // 有 enabled 字段的集合才显示批量启用/停用
@@ -1476,9 +1371,8 @@ function initPalette() {
       const s = SCHEMAS[col];
       const hay = [it[s.titleField], it[s.descField === '_desc' ? '_desc' : s.descField], (it[s.tagsField] || []).join(' ')].join(' ').toLowerCase();
       return hay.includes(q);
-    });
+    }) : [];
     if (!matched.length) matched = textMatch;
-  }
     active = 0;
     paint(matched.slice(0, 50));
   };
@@ -1581,3 +1475,4 @@ if (document.readyState === 'loading') {
 } else {
   boot();
 }
+

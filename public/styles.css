@@ -109,7 +109,7 @@ nav { margin-top: 20px; display: flex; flex-direction: column; gap: 3px; flex: 1
 /* ---------- 列表行 ---------- */
 .list { display: flex; flex-direction: column; gap: 8px; }
 .row {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
   padding: 12px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm);
   transition: border-color .15s ease, box-shadow .15s ease;
 }
@@ -173,7 +173,7 @@ button:active:not(:disabled) { filter: brightness(.94); }
 /* ---------- 弹层 ---------- */
 .modal { position: fixed; inset: 0; background: rgba(6,8,12,.55); display: flex; align-items: center; justify-content: center; z-index: 50; backdrop-filter: blur(2px); animation: fadeIn .15s ease; }
 .modal.hidden, .toast.hidden { display: none; }
-.modal-box { width: 540px; max-width: 92vw; max-height: 86vh; overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); animation: fadeIn .16s ease; }
+.modal-box { width: min(640px, 92vw); max-width: 92vw; max-height: 86vh; overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); animation: fadeIn .16s ease; }
 .modal-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border); font-weight: 600; position: sticky; top: 0; background: var(--panel); }
 .modal-head button { background: transparent; color: var(--muted); font-size: 16px; line-height: 1; }
 .modal-head button:hover { color: var(--text); }
@@ -188,7 +188,7 @@ button:active:not(:disabled) { filter: brightness(.94); }
 
 /* 列表页搜索框 */
 .search {
-  width: 100%; max-width: 360px; margin-bottom: 14px; background: var(--bg);
+  width: 100%; max-width: 480px; margin-bottom: 14px; background: var(--bg);
   border: 1px solid var(--border); color: var(--text); border-radius: var(--radius-sm);
   padding: 9px 12px; font-size: 13px; font-family: inherit;
   transition: border-color .15s ease, box-shadow .15s ease;
