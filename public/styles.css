@@ -117,6 +117,7 @@ nav { margin-top: 20px; display: flex; flex-direction: column; gap: 3px; flex: 1
 .row:hover { border-color: var(--muted); box-shadow: var(--shadow-sm); }
 .row .meta { min-width: 0; }
 .row .title { font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; }
+.row .title:hover { color: var(--accent); }
 .row .desc { color: var(--muted); font-size: 12px; margin-top: 4px; word-break: break-all; }
 .row .desc.sub { font-size: 11px; opacity: .85; }
 .row .ops { display: flex; gap: 6px; flex-shrink: 0; }
