@@ -344,7 +344,7 @@ function openForm(col, item, onSave) {
         if (!items.length) { box.innerHTML = '未发现相似资源'; return; }
         box.innerHTML = '<div class="list">' + items.map(x => {
           const s = SCHEMAS[x.collection];
-          return '<div class="row" data-col="' + x.collection + '" data-id="' + x.item.id + '"><div class="meta"><div class="title">' + esc(x.item[s.titleField]) + ' <span class="pill">' + esc(s.label) + '</span></div><div class="desc">' + esc(String(x.item[s.descField === '_desc' ? '_desc' : s.descField] || '')) + '</div></div><div class="ops"><button class="btn sm">打开</button></div></div>';
+          return '<div class="row" data-col="' + x.collection + '" data-id="' + x.item.id + '"><div class="meta"><div class="title">' + esc(x.item[s.titleField]) + ' <span class="pill">' + esc(s.label) + '</span></div><div class="desc">' + esc(String(x.item[s.descField === '_desc' ? '_desc' : s.descField] || '')) + '</div></div></div>';
         }).join('') + '</div>';
         box.querySelectorAll('.row').forEach(row => row.onclick = () => {
           closeModal();
@@ -1359,7 +1359,7 @@ function initPalette() {
     if (!list.length) { results.innerHTML = '<div class="empty">无匹配结果</div>'; return; }
     results.innerHTML = list.map(({ col, it }, i) => {
       const s = SCHEMAS[col];
-      return '<div class="row pal-item ' + (i === active ? 'pal-active' : '') + '" data-col="' + col + '" data-id="' + it.id + '"><div class="meta"><div class="title">' + esc(it[s.titleField]) + ' <span class="pill">' + esc(s.label) + '</span></div><div class="desc">' + esc(String(it[s.descField === '_desc' ? '_desc' : s.descField] || '')) + '</div></div><div class="ops"><button class="btn sm">打开</button></div></div>';
+      return '<div class="row pal-item ' + (i === active ? 'pal-active' : '') + '" data-col="' + col + '" data-id="' + it.id + '"><div class="meta"><div class="title">' + esc(it[s.titleField]) + ' <span class="pill">' + esc(s.label) + '</span></div><div class="desc">' + esc(String(it[s.descField === '_desc' ? '_desc' : s.descField] || '')) + '</div></div></div>';
     }).join('');
     results.querySelectorAll('.pal-item').forEach(r => r.onclick = () => activate(r.dataset.col, r.dataset.id));
   };

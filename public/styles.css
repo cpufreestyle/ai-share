@@ -96,6 +96,7 @@ nav { margin-top: 20px; display: flex; flex-direction: column; gap: 3px; flex: 1
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--panel);
   position: sticky; top: 0; z-index: 10;
+  box-shadow: var(--shadow-sm);
 }
 .topbar h1 { font-size: 17px; margin: 0; font-weight: 650; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -111,9 +112,9 @@ nav { margin-top: 20px; display: flex; flex-direction: column; gap: 3px; flex: 1
 .row {
   display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
   padding: 12px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm);
-  transition: border-color .15s ease, box-shadow .15s ease;
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
 }
-.row:hover { border-color: var(--muted); box-shadow: var(--shadow-sm); }
+.row:hover { border-color: var(--muted); box-shadow: var(--shadow-sm); background: var(--panel2); }
 .row .meta { min-width: 0; }
 .row .title { font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .row .desc { color: var(--muted); font-size: 12px; margin-top: 4px; word-break: break-all; }
@@ -167,7 +168,7 @@ button:active:not(:disabled) { filter: brightness(.94); }
   font-family: "SF Mono", Consolas, "Cascadia Code", monospace; font-size: 12px; white-space: pre; overflow: auto; max-height: 280px; color: var(--code-text);
 }
 .path { color: var(--accent2); font-size: 12px; word-break: break-all; margin: 6px 0; }
-.empty { color: var(--muted); text-align: center; padding: 46px 24px; border: 1px dashed var(--border); border-radius: var(--radius); }
+.empty { color: var(--muted); text-align: center; padding: 48px 24px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel2); font-size: 13px; line-height: 1.6; }
 .infotext { background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; margin: 0; font-family: "SF Mono", Consolas, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 320px; overflow: auto; color: var(--code-text); }
 
 /* ---------- 弹层 ---------- */
