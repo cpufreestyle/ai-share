@@ -486,6 +486,19 @@ async function renderCollection(col, prefetched) {
       toast(r.ok ? (r.kind === 'url' ? ('URL 可达（' + (r.status || '?') + '）') : (r.note || 'stdio 配置有效')) : ('检查未通过：' + (r.error || '未知')));
     });
   };
+  const copyTitle = (text) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => toast('已复制：' + text), () => toast('复制失败，请手动选择'));
+  };
+  if (listBox) {
+    listBox.onclick = (e) => {
+      const title = e.target.closest('.title');
+      if (title) copyTitle(title.textContent || '');
+    };
+    listBox.querySelectorAll('.sel').forEach(c => {
+      c.onclick = (ev) => { if (c.checked) ev.stopPropagation(); };
+    });
+  }
 
   view.innerHTML = `<div class="section-desc">集中维护 ${schema.label}，可在「共享 / 导出」中一键应用到各客户端。<span id="listCount" class="hint"></span></div>
     <input id="listSearch" class="search" type="text" placeholder="搜索 ${schema.label}…" autocomplete="off"/>
