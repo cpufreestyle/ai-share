@@ -828,13 +828,6 @@ async function loadExport() {
       <div class="ops" style="margin-top:8px">
         <button class="btn sm" data-copy="${i}">复制</button>
         <button class="btn sm" data-plan="${i}">预览差异</button>
-        <button class="btn sm" data-plan="${i}">预览差异</button>
-        <button class="btn sm" data-plan="${i}">预览差异</button>
-        <button class="btn sm" data-plan="${i}">预览差异</button>
-        <button class="btn sm" data-plan="${i}">预览差异</button>
-        <button class="btn sm" data-plan="${i}">预览差异</button>
-        <button class="btn sm" data-plan="${i}">预览差异</button>
-        <button class="btn sm" data-plan="${i}">预览差异</button>
         <button class="btn sm" data-dl="${i}">下载 mcp.json</button>
         <button class="btn sm primary" data-write="${i}">写入客户端</button>
       </div>
