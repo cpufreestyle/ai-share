@@ -233,6 +233,7 @@ button:active:not(:disabled) { filter: brightness(.94); }
 #palette .search { max-width: none; margin-bottom: 0; }
 .pal-item { cursor: pointer; }
 .pal-item.pal-active, .pal-item:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); }
+.pal-item:hover .title { color: var(--accent); }
 .pal-item .desc { font-size: 12px; }
 .row .meta { flex: 1 1 auto; }
 .selwrap { flex-shrink: 0; display: flex; align-items: center; padding-right: 4px; }
