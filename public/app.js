@@ -106,6 +106,11 @@ function showInfoModal(title, text) {
   const body = $('#modalBody');
   body.innerHTML = `<pre class="infotext">${esc(text)}</pre>`;
   $('#modalTitle').textContent = title;
+  const foot = $('#modalFoot');
+  foot.innerHTML = '<button class="btn" id="modalCopy">复制</button><button class="btn primary" id="modalSave">关闭</button>';
+  $('#modalCopy').onclick = () => {
+    navigator.clipboard.writeText(text).then(() => toast('已复制'), () => toast('复制失败，请手动选择'));
+  };
   $('#modalSave').textContent = '关闭';
   $('#modalSave').onclick = closeModal;
   $('#modal').classList.remove('hidden');
