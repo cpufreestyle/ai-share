@@ -453,7 +453,7 @@ async function renderCollection(col, prefetched) {
       + (col === 'mcpservers' ? `<button class="btn sm" data-check="${it.id}">检查</button>` : '');
     const syncInfo = (col === 'repos' && it.lastSyncAt) ? `<div class="desc sub">上次同步：${esc(new Date(it.lastSyncAt).toLocaleString())}</div>` : '';
     return `<div class="row">
-      <div class="meta"><div class="title">${esc(it[schema.titleField])} ${pill}${installPill}${cfgPill}</div><div class="desc">${esc(desc)}</div>${syncInfo}${tags}</div>
+      <div class="meta"><div class="title" title="点击复制">${esc(it[schema.titleField])} ${pill}${installPill}${cfgPill}</div><div class="desc">${esc(desc)}</div>${syncInfo}${tags}</div>
       <label class="selwrap"><input type="checkbox" class="sel" data-sel="${it.id}"/></label><div class="ops">${extra}<button class="btn sm" data-edit="${it.id}">编辑</button><button class="btn sm danger" data-del="${it.id}">删除</button></div>
     </div>`;
   };
