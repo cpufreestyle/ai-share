@@ -154,9 +154,12 @@ button:active:not(:disabled) { filter: brightness(.94); }
 /* 勾选框不应被 .field input 的 width:100% 拉满 */
 .check input, .improw input, .checks input { width: auto; padding: 0; }
 
-.tag { display: inline-block; background: var(--panel2); border: 1px solid var(--border); color: var(--muted); border-radius: 20px; padding: 1px 9px; font-size: 11px; margin: 4px 4px 0 0; }
-.pill { font-size: 11px; padding: 1px 8px; border-radius: 20px; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+.tag { display: inline-block; background: var(--panel2); border: 1px solid var(--border); color: var(--muted); border-radius: 20px; padding: 1px 9px; font-size: 11px; margin: 4px 4px 0 0; transition: border-color .15s ease, color .15s ease; }
+.tag:hover { border-color: var(--accent); color: var(--text); }
+.pill { font-size: 11px; padding: 2px 9px; border-radius: 20px; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; background: var(--panel2); transition: border-color .15s ease, color .15s ease, background-color .15s ease; }
 .pill.on { color: var(--accent2); border-color: var(--accent2); }
+.pill.on:hover { background: rgba(56,211,159,.08); }
+.pill.off:hover { color: var(--text); }
 .pill.off { color: var(--muted); }
 
 .checks { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow: auto; }
