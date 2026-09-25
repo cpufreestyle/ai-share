@@ -1311,9 +1311,11 @@ $('#collectBtn').onclick = async () => {
   const body = $('#modalBody');
   body.innerHTML = `<pre class="infotext">${esc(msg)}</pre>
     <div style="margin-top:14px;display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn" id="colCopy">复制</button>
       <button class="btn" id="colClose">关闭</button>
       <button class="btn primary" id="colWrite">一键写入客户端</button>
     </div>`;
+  $('#colCopy').onclick = () => { navigator.clipboard.writeText(msg).then(() => toast('已复制'), () => toast('复制失败，请手动选择')); };
   $('#modalTitle').textContent = '一键采集结果';
   $('#modal').classList.remove('hidden');
   $('#colClose').onclick = closeModal;
