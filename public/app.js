@@ -824,7 +824,7 @@ async function loadExport() {
     <div class="card-h">${esc(c.clientName)} <span class="pill on">${esc(c.clientType)}</span></div>
     <div class="card-b">
       <div class="path">→ ${esc(c.configPath)}</div>
-      <div class="code" id="code_${i}">${esc(JSON.stringify(c.content, null, 2))}</div>
+      <div class="code" id="code_${i}"><pre>${esc(JSON.stringify(c.content, null, 2))}</pre><button class="btn sm code-copy" data-code-copy="${i}">复制</button></div>
       <div class="ops" style="margin-top:8px">
         <button class="btn sm" data-copy="${i}">复制</button>
         <button class="btn sm" data-plan="${i}">预览差异</button>
@@ -835,6 +835,7 @@ async function loadExport() {
 
   const jsonOf = i => JSON.stringify(data.configs[i].content, null, 2);
   out.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => { navigator.clipboard.writeText(jsonOf(b.dataset.copy)); toast('已复制'); });
+  out.querySelectorAll('[data-code-copy]').forEach(b => b.onclick = () => { navigator.clipboard.writeText(jsonOf(b.dataset.codeCopy)); toast('已复制'); });
   out.querySelectorAll('[data-plan]').forEach(b => b.onclick = async () => {
     const r = await api.planExport(currentProfile).catch(e => ({ error: e.message }));
     if (r.error) return toast('获取计划失败：' + r.error);
