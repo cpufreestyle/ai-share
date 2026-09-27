@@ -826,7 +826,7 @@ async function loadExport() {
       <div class="code" id="code_${i}"><pre>${esc(JSON.stringify(c.content, null, 2))}</pre><button class="btn sm code-copy" data-code-copy="${i}">复制</button></div>
       <div class="ops">
         <button class="btn sm" data-plan="${i}">预览差异</button>
-        <button class="btn sm" data-dl="${i}">下载 mcp.json</button>
+        <button class="btn sm" data-dl="${i}"><span class="btn-label">下载 mcp.json</span><span class="btn-short">下载</span></button>
         <div style="flex:1"></div>
         <button class="btn sm primary" data-write="${i}">写入客户端</button>
       </div>
