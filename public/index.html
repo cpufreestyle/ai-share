@@ -2,20 +2,30 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark light" />
+  <meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="AI Share" />
   <title>AI Share · 共享 AI 资源管理</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%234aa3ff'/%3E%3Cstop offset='.55' stop-color='%230a84ff'/%3E%3Cstop offset='1' stop-color='%230060df'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='15' fill='url(%23g)'/%3E%3Ctext x='32' y='42' font-family='Helvetica,Arial,sans-serif' font-size='27' font-weight='800' fill='%23fff' text-anchor='middle'%3EAI%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <aside class="sidebar">
     <div class="brand">
-      <div class="logo">AI<span>Share</span></div>
+      <div class="brand-top">
+        <div class="brand-icon" aria-hidden="true">AI</div>
+        <div class="logo">Share</div>
+      </div>
       <div class="sub">共享 AI 资源中心</div>
     </div>
     <nav id="nav"></nav>
     <div class="side-foot">
-      <button class="btn primary" id="collectBtn" style="width:100%;margin-bottom:10px">🔍 一键采集本机资源</button>
-      <div id="status" class="status">● 本地服务已连接</div>
+      <button class="btn primary" id="collectBtn" style="width:100%;margin-bottom:10px"><svg class="ic-svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.4"/><path d="M15.6 15.6 20.4 20.4"/></svg>一键采集本机资源</button>
+      <div id="status" class="status">本地服务已连接</div>
       <div id="dataDir" class="status"></div>
     </div>
   </aside>
@@ -38,6 +48,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
+  <script src="/icons.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

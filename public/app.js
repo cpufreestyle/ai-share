@@ -47,19 +47,19 @@ function renderVault() {
   const el = document.getElementById('status');
   fetch('/api/vault/status').then(r => r.json()).then(s => {
     if (s.enabled && s.locked) {
-      el.innerHTML = `🔒 <input id="vp" type="password" placeholder="主密码" style="width:88px"/> <button class="btn sm" id="vUnlock">解锁</button>`;
+      el.innerHTML = `${icon('lock', 12)} <input id="vp" type="password" placeholder="主密码" style="width:88px"/> <button class="btn sm" id="vUnlock">解锁</button>`;
       document.getElementById('vUnlock').onclick = async () => {
         const r = await fetch('/api/vault/unlock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: document.getElementById('vp').value }) }).then(x => x.json());
         if (r.ok) { toast('已解锁'); renderVault(); } else toast(r.error || '密码错误');
       };
     } else if (s.enabled && !s.locked) {
-      el.innerHTML = `🔓 密钥已解锁 <button class="btn sm" id="vLock">锁定</button>`;
+      el.innerHTML = `${icon('unlock', 12)} 密钥已解锁 <button class="btn sm" id="vLock">锁定</button>`;
       document.getElementById('vLock').onclick = () => fetch('/api/vault/lock', { method: 'POST' }).then(() => { toast('已锁定'); renderVault(); });
     } else {
-      el.innerHTML = `🔒 <button class="btn sm" id="vSet">启用主密码</button>`;
+      el.innerHTML = `${icon('lock', 12)} <button class="btn sm" id="vSet">启用主密码</button>`;
       document.getElementById('vSet').onclick = openVaultSet;
     }
-  }).catch(() => { el.textContent = '● 本地服务已连接'; });
+  }).catch(() => { el.textContent = '本地服务已连接'; });
 }
 /* ---------- 数据目录展示 ---------- */
 // 数据目录由 DATA_DIR 推导（可用环境变量 AI_SHARE_DATA_DIR 覆盖），
@@ -68,7 +68,7 @@ function renderDataDir() {
   const el = document.getElementById('dataDir');
   if (!el) return;
   fetch('/api/system/info').then(r => r.json()).then(s => {
-    el.innerHTML = '<span title="' + s.dataDir + '">📁 数据目录 <code>' + s.dataDir + '</code></span>';
+    el.innerHTML = '<span title="' + s.dataDir + '">' + icon('folder', 12) + ' 数据目录 <code>' + s.dataDir + '</code></span>';
   }).catch(() => { el.textContent = ''; });
 }
 
@@ -127,7 +127,7 @@ function confirmModal(title, text, onOk, okLabel = '确认') {
 /* ---------- 集合 Schema ---------- */
 const SCHEMAS = {
   providers: {
-    label: 'API 端点', icon: '🔌', titleField: 'name', descField: 'baseUrl', tagsField: 'models',
+    label: 'API 端点', icon: 'plug', titleField: 'name', descField: 'baseUrl', tagsField: 'models',
     fields: [
       { key: 'name', label: '名称', type: 'text', required: true },
       { key: 'baseUrl', label: 'Base URL', type: 'text' },
@@ -137,7 +137,7 @@ const SCHEMAS = {
     ],
   },
   prompts: {
-    label: '提示词', icon: '💬', titleField: 'name', descField: 'content', tagsField: 'tags',
+    label: '提示词', icon: 'chat', titleField: 'name', descField: 'content', tagsField: 'tags',
     fields: [
       { key: 'name', label: '名称', type: 'text', required: true },
       { key: 'category', label: '分类', type: 'text' },
@@ -146,7 +146,7 @@ const SCHEMAS = {
     ],
   },
   mcpservers: {
-    label: 'MCP 服务器', icon: '🧩', titleField: 'name', descField: '_desc',
+    label: 'MCP 服务器', icon: 'puzzle', titleField: 'name', descField: '_desc',
     fields: [
       { key: 'name', label: '名称', type: 'text', required: true },
       { key: 'type', label: '类型', type: 'select', options: ['stdio', 'sse', 'http'] },
@@ -159,7 +159,7 @@ const SCHEMAS = {
     ],
   },
   skillrepos: {
-    label: 'Skill 仓库', icon: '📦', titleField: 'name', descField: 'description',
+    label: 'Skill 仓库', icon: 'box', titleField: 'name', descField: 'description',
     // 被方案(profile)直接引用；是“已登记的 Skill 来源”，不是同步通道
     fields: [
       { key: 'name', label: '名称', type: 'text', required: true },
@@ -170,7 +170,7 @@ const SCHEMAS = {
     ],
   },
   clients: {
-    label: 'Agent 客户端', icon: '🖥️', titleField: 'name', descField: 'configPath',
+    label: 'Agent 客户端', icon: 'display', titleField: 'name', descField: 'configPath',
     fields: [
       { key: 'name', label: '名称', type: 'text', required: true },
       { key: 'type', label: '类型', type: 'select', options: ['claude', 'cursor', 'vscode', 'codebuddy', 'generic'] },
@@ -182,7 +182,7 @@ const SCHEMAS = {
     ],
   },
   repos: {
-    label: '资源仓库(同步)', icon: '🗂️', titleField: 'name', descField: '_desc',
+    label: '资源仓库(同步)', icon: 'folder', titleField: 'name', descField: '_desc',
     // 通用“仓库扫描导入器”：主要登记“生成的软件项目目录”（d:\ai share\repo\ 下的本地目录），
     // 一个项目可同时包含 Skill/MCP/提示词，故 resourceType 为多选；同步到 skillrepos/mcpservers/prompts。
     // 与 skillrepos 的区别在于它是“同步通道”，不是被方案直接引用的来源。
@@ -1086,17 +1086,17 @@ async function renderOverview() {
   }
   const c = stats.counts || {};
   const cards = [
-    ['🔌', 'API 端点', c.providers || 0],
-    ['💬', '提示词', c.prompts || 0],
-    ['🧩', 'MCP 服务器', c.mcpservers || 0],
-    ['📦', 'Skill 仓库', c.skillrepos || 0],
-    ['🖥️', 'Agent 客户端', c.clients || 0],
-    ['🗂️', '资源仓库', c.repos || 0],
-    ['🔀', '共享方案', c.profiles || 0],
-    ['🧮', '资源总计', c.total || 0],
+    ['plug', 'API 端点', c.providers || 0],
+    ['chat', '提示词', c.prompts || 0],
+    ['puzzle', 'MCP 服务器', c.mcpservers || 0],
+    ['box', 'Skill 仓库', c.skillrepos || 0],
+    ['display', 'Agent 客户端', c.clients || 0],
+    ['folder', '资源仓库', c.repos || 0],
+    ['sliders', '共享方案', c.profiles || 0],
+    ['number', '资源总计', c.total || 0],
   ];
   const fmtBytes = (b) => (b == null ? '—' : (b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(1) + ' MB'));
-  const tpl = (icon, label, val) => `<div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow-sm)"><div style="font-size:22px">${icon}</div><div style="font-size:26px;font-weight:700;margin:6px 0 2px">${val}</div><div class="hint">${label}</div></div>`;
+  const tpl = (ic, label, val) => `<div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow-sm)"><div style="color:var(--accent);display:flex;align-items:center;height:20px">${icon(ic, 20)}</div><div style="font-size:26px;font-weight:700;margin:8px 0 2px">${val}</div><div class="hint">${label}</div></div>`;
   const sp = stats.snapshots || {};
   const lastB = sp.lastBackupAt ? new Date(sp.lastBackupAt).toLocaleString() : '—';
   $('#view').innerHTML = `
@@ -1119,9 +1119,9 @@ async function renderOverview() {
         <button class="btn" id="ovHealthMd" style="margin-top:6px">查看 Markdown 资源索引</button>
       </div></div>
       <div class="card"><div class="card-h">快速操作</div><div class="card-b" style="display:flex;flex-direction:column;gap:10px">
-        <button class="btn" id="ovCollect">🔍 一键采集本机资源</button>
-        <button class="btn" id="ovExport">📤 共享 / 导出</button>
-        <button class="btn" id="ovSync">🔄 网络同步</button>
+        <button class="btn" id="ovCollect">${icon('search', 14)} 一键采集本机资源</button>
+        <button class="btn" id="ovExport">${icon('export', 14)} 共享 / 导出</button>
+        <button class="btn" id="ovSync">${icon('sync', 14)} 网络同步</button>
       </div></div>
     </div>`;
   $('#ovBackup').onclick = () => navTo('backup');
@@ -1152,20 +1152,20 @@ function navTo(key) {
 }
 function buildNav() {
   const items = [
-    { k: 'overview', label: '概览', icon: '🏠' },
-    { k: 'providers', label: 'API 端点', icon: '🔌' },
-    { k: 'prompts', label: '提示词', icon: '💬' },
-    { k: 'mcpservers', label: 'MCP 服务器', icon: '🧩' },
-    { k: 'skillrepos', label: 'Skill 仓库', icon: '📦' },
-    { k: 'clients', label: 'Agent 客户端', icon: '🖥️' },
-    { k: 'repos', label: '资源仓库(同步)', icon: '🗂️' },
-    { k: 'profiles', label: '共享配置', icon: '🔀' },
-    { k: 'export', label: '共享 / 导出', icon: '📤' },
-    { k: 'sync', label: '网络同步', icon: '🔄' },
-    { k: 'backup', label: '备份 / 迁移', icon: '💾' },
-    { k: 'trash', label: '回收站', icon: '🗑️' },
+    { k: 'overview', label: '概览', icon: 'home' },
+    { k: 'providers', label: 'API 端点', icon: 'plug' },
+    { k: 'prompts', label: '提示词', icon: 'chat' },
+    { k: 'mcpservers', label: 'MCP 服务器', icon: 'puzzle' },
+    { k: 'skillrepos', label: 'Skill 仓库', icon: 'box' },
+    { k: 'clients', label: 'Agent 客户端', icon: 'display' },
+    { k: 'repos', label: '资源仓库(同步)', icon: 'folder' },
+    { k: 'profiles', label: '共享配置', icon: 'sliders' },
+    { k: 'export', label: '共享 / 导出', icon: 'export' },
+    { k: 'sync', label: '网络同步', icon: 'sync' },
+    { k: 'backup', label: '备份 / 迁移', icon: 'backup' },
+    { k: 'trash', label: '回收站', icon: 'trash' },
   ];
-  $('#nav').innerHTML = items.map(i => `<div class="nav-item" data-k="${i.k}"><span class="ic">${i.icon}</span>${i.label}</div>`).join('');
+  $('#nav').innerHTML = items.map(i => `<div class="nav-item" data-k="${i.k}"><span class="ic">${icon(i.icon, 17)}</span>${i.label}</div>`).join('');
   $('#nav').querySelectorAll('.nav-item').forEach(n => n.onclick = () => navTo(n.dataset.k));
 }
 
