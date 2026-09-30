@@ -494,6 +494,12 @@ async function renderCollection(col, prefetched) {
     if (!text) return;
     navigator.clipboard.writeText(text).then(() => toast('已复制：' + text), () => toast('复制失败，请手动选择'));
   };
+
+  view.innerHTML = `<div class="section-desc">集中维护 ${schema.label}，可在「共享 / 导出」中一键应用到各客户端。<span id="listCount" class="hint"></span></div>
+    <input id="listSearch" class="search" type="text" placeholder="搜索 ${schema.label}…" autocomplete="off"/>
+    <div class="batchbar hidden" id="batchBar"><label class="selall"><input type="checkbox" id="selAll"/> 全选</label><span id="selCount" class="hint">已选 0 项</span><span class="spacer"></span>${hasEnabled ? '<button class="btn sm" id="batchOn">启用</button><button class="btn sm" id="batchOff">停用</button>' : ''}<button class="btn sm danger" id="batchDel">删除（移入回收站）</button></div>
+    <div class="list" id="listBox"></div>`
+  const listBox = $('#listBox');
   if (listBox) {
     listBox.onclick = (e) => {
       const title = e.target.closest('.title');
@@ -503,12 +509,6 @@ async function renderCollection(col, prefetched) {
       c.onclick = (ev) => { if (c.checked) ev.stopPropagation(); };
     });
   }
-
-  view.innerHTML = `<div class="section-desc">集中维护 ${schema.label}，可在「共享 / 导出」中一键应用到各客户端。<span id="listCount" class="hint"></span></div>
-    <input id="listSearch" class="search" type="text" placeholder="搜索 ${schema.label}…" autocomplete="off"/>
-    <div class="batchbar hidden" id="batchBar"><label class="selall"><input type="checkbox" id="selAll"/> 全选</label><span id="selCount" class="hint">已选 0 项</span><span class="spacer"></span>${hasEnabled ? '<button class="btn sm" id="batchOn">启用</button><button class="btn sm" id="batchOff">停用</button>' : ''}<button class="btn sm danger" id="batchDel">删除（移入回收站）</button></div>
-    <div class="list" id="listBox"></div>`
-  const listBox = $('#listBox');
   const sel = new Set();
   let visible = items;
   let lastIdx = -1;
