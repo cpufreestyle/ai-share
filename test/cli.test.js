@@ -68,6 +68,21 @@ server.listen(0, '127.0.0.1', async () => {
     ok('related 对有效 id 返回 0', r.status === 0);
     ok('related 输出相似资源或空提示', r.stdout.indexOf('共') !== -1 || r.stdout.indexOf('无相似资源') !== -1);
 
+    r = await run(['search', 'related-provider'], url);
+    ok('search 普通跨集合搜索成功', r.status === 0 && r.stdout.indexOf('related-provider') !== -1);
+
+    r = await run(['search', 'related-provider', 'providers'], url);
+    ok('search 指定集合搜索成功', r.status === 0 && r.stdout.indexOf('related-provider') !== -1);
+
+    r = await run(['search', 'related-provider', 'not-a-col'], url);
+    ok('search 指定非法集合退出码 1', r.status === 1);
+
+    r = await run(['search', 'related-provider', '--semantic'], url);
+    ok('search --semantic 退出码 0', r.status === 0);
+
+    r = await run(['-j', 'search', 'related-provider'], url);
+    ok('-j search 输出 JSON 数组', r.status === 0 && r.stdout.trim().startsWith('['));
+
     // 服务离线时的报错路径：指向一个不可能有服务的端口（且禁用自动拉起）
     r = await run(['status'], 'http://127.0.0.1:1');
     ok('服务不可达时给出友好错误并退出码 1', r.status === 1 && r.stderr.indexOf('错误') !== -1);

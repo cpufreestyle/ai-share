@@ -40,6 +40,7 @@ const SCHEMAS = {
   skillrepos: { titleField: 'name', descField: 'description', tagsField: 'tags', idField: 'name' },
   clients: { titleField: 'name', descField: 'configPath', tagsField: 'tags', idField: 'name' },
   repos: { titleField: 'name', descField: '_desc', tagsField: 'tags', idField: 'name' },
+  profiles: { titleField: 'name', descField: 'description', tagsField: 'tags', idField: 'name' },
 };
 
 

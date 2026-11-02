@@ -4,7 +4,7 @@
 //   ai-share status                      服务健康与各集合概览
 //   ai-share list <collection>           列出条目（id / 名称 / 启用状态）
 //   ai-share get <col> <id|名称>          输出单条 JSON（本机接口含明文密钥，注意保管）
-//   ai-share search <关键字> [collection] 跨集合搜索
+//   ai-share search <关键字> [col] [--semantic] 跨集合搜索（可选向量语义搜索）
 //   ai-share related <col> <id|名称>       查找相似资源（语义搜索）
 //   ai-share profiles                    列出方案
 //   ai-share plan <方案>                  预览将写入客户端的内容（不落盘）
@@ -118,7 +118,7 @@ const HELP = [
   '  status                        服务健康与各集合概览',
   '  list <collection>             列出条目（' + COLS.join(' / ') + '）',
   '  get <collection> <id|名称>     输出单条 JSON（含明文密钥，注意保管）',
-  '  search <关键字> [collection]   跨集合搜索',
+  '  search <关键字> [collection]   跨集合搜索（加 --semantic 启用向量语义搜索）',
   '  profiles                      列出方案',
   '  plan <方案>                   预览将写入客户端的内容（不落盘）',
   '  apply <方案>                  把方案写入客户端配置',
@@ -178,23 +178,25 @@ async function main() {
   }
 
   if (cmd === 'search') {
-    const [kw, col] = rest;
-    if (!kw) throw new Error('用法： ai-share search <关键字> [collection]');
+    const semantic = rest.includes('--semantic') || rest.includes('-s');
+    const pos = rest.filter((a) => a !== '--semantic' && a !== '-s');
+    const [kw, col] = pos;
+    if (!kw) throw new Error('用法： ai-share search <关键字> [collection] [--semantic]');
+    if (col && !COLS.includes(col)) throw new Error('集合必须是 ' + COLS.join(' / '));
     await ensureServer();
-    if (col) return console.log(JSON.stringify(await req('GET', '/api/' + col), null, 2));
-    const out = [];
-    for (const c of COLS) {
-      let items = [];
-      try { items = await req('GET', '/api/' + c); } catch (e) { continue; }
-      const k = kw.toLowerCase();
-      for (const it of items) {
-        const hay = JSON.stringify(it).toLowerCase();
-        if (hay.includes(k)) out.push({ collection: c, item: it });
-      }
+    const endpoint = '/api/system/semantic-search?q=' + encodeURIComponent(kw) + (col ? ('&col=' + encodeURIComponent(col)) : '');
+    let r = await req('GET', endpoint + (semantic ? '&semantic=1' : '&semantic=0'));
+    if (semantic && r.warning) {
+      if (!JSON_MODE) console.log(dim(r.warning + '，已自动回退到普通文本搜索'));
+      r = await req('GET', endpoint + '&semantic=0');
     }
+    const out = r.items || [];
     if (JSON_MODE) return console.log(JSON.stringify(out, null, 2));
     if (!out.length) return console.log(dim('无匹配'));
-    for (const { collection, item } of out) console.log(pad(collection, 14) + pad(item.id, 18) + titleOf(item));
+    for (const { collection: c, item, score } of out) {
+      const scoreStr = (semantic && score) ? dim(' (相似度 ' + (score * 100).toFixed(0) + '%)') : '';
+      console.log(pad(c, 14) + pad(item.id, 18) + titleOf(item) + scoreStr);
+    }
     console.log(dim('共 ' + out.length + ' 条'));
     return;
   }
