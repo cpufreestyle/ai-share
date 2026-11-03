@@ -173,7 +173,7 @@ const SCHEMAS = {
     label: 'Agent 客户端', icon: 'display', titleField: 'name', descField: 'configPath',
     fields: [
       { key: 'name', label: '名称', type: 'text', required: true },
-      { key: 'type', label: '类型', type: 'select', options: ['claude', 'cursor', 'vscode', 'codebuddy', 'generic'] },
+      { key: 'type', label: '类型', type: 'select', options: ['claude', 'cursor', 'windsurf', 'trae', 'cline', 'vscode', 'codebuddy', 'generic'] },
       { key: 'enabled', label: '启用', type: 'checkbox' },
       { key: 'configPath', label: '配置写入路径', type: 'text', hint: '支持占位符 {APPDATA} {USERPROFILE}' },
       { key: 'skillPaths', label: 'Skill 扫描路径', type: 'paths', hint: '每行一个本地目录，支持占位符 {APPDATA} {USERPROFILE}；留空则用内置默认路径扫描 Skill' },
@@ -605,7 +605,7 @@ async function openImportFromClient() {
   const clients = await fetch('/api/detect/clients').then(r => r.json()).catch(() => []);
   const clientOpts = clients.length
     ? clients.map(c => `<option value="${c.type}">${esc(c.name)}${c.installed ? '（已安装）' : ''}${c.exists ? '（已有配置）' : ''}</option>`).join('')
-    : ['claude', 'cursor', 'vscode', 'codebuddy'].map(t => `<option value="${t}">${t}</option>`).join('');
+    : ['claude', 'cursor', 'windsurf', 'trae', 'cline', 'vscode', 'codebuddy'].map(t => `<option value="${t}">${t}</option>`).join('');
   body.innerHTML = `<div class="field"><label>选择客户端</label><select id="impType">${clientOpts}</select></div>
     <div class="hint" style="margin-bottom:10px">读取该客户端电脑上的真实 mcp 配置文件，将其中已有的服务器采集进来统一管理。</div>
     <div style="margin:6px 0"><button class="btn" id="impScan">扫描现有 MCP 配置</button></div>
@@ -639,7 +639,7 @@ async function openImportSkillFromClient() {
   const clients = await fetch('/api/detect/clients').then(r => r.json()).catch(() => []);
   const clientOpts = clients.length
     ? clients.map(c => `<option value="${c.type}">${esc(c.name)}${c.installed ? '（已安装）' : ''}${c.exists ? '（已有配置）' : ''}</option>`).join('')
-    : ['claude', 'cursor', 'vscode', 'codebuddy'].map(t => `<option value="${t}">${t}</option>`).join('');
+    : ['claude', 'cursor', 'windsurf', 'trae', 'cline', 'vscode', 'codebuddy'].map(t => `<option value="${t}">${t}</option>`).join('');
   body.innerHTML = `<div class="field"><label>选择客户端</label><select id="impType">${clientOpts}</select></div>
     <div class="hint" style="margin-bottom:10px">读取该客户端电脑上的本地 skill 目录（如 ~/.codebuddy/skills），逐个解析每个 skill 文件夹的 SKILL.md 并汇总进「Skill 仓库」。</div>
     <div style="margin:6px 0"><button class="btn" id="impScan">扫描本地 Skill</button></div>
@@ -674,7 +674,7 @@ async function openImportPromptFromClient() {
   const clients = await fetch('/api/detect/clients').then(r => r.json()).catch(() => []);
   const clientOpts = clients.length
     ? clients.map(c => `<option value="${c.type}">${esc(c.name)}${c.installed ? '（已安装）' : ''}${c.exists ? '（已有配置）' : ''}</option>`).join('')
-    : ['claude', 'cursor', 'vscode', 'codebuddy'].map(t => `<option value="${t}">${t}</option>`).join('');
+    : ['claude', 'cursor', 'windsurf', 'trae', 'cline', 'vscode', 'codebuddy'].map(t => `<option value="${t}">${t}</option>`).join('');
   body.innerHTML = `<div class="field"><label>选择客户端</label><select id="impType">${clientOpts}</select></div>
     <div class="hint" style="margin-bottom:10px">读取该客户端电脑上的提示词/规则文件（如 CLAUDE.md、.cursor/rules/*.mdc、copilot-instructions.md），汇总进「提示词」资源。</div>
     <div style="margin:6px 0"><button class="btn" id="impScan">扫描本地提示词/规则</button></div>
