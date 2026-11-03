@@ -42,7 +42,7 @@ server.listen(0, '127.0.0.1', async () => {
   try {
     let r = await run(['help'], url);
     ok('help 退出码 0', r.status === 0);
-    ok('help 输出全部命令', r.stdout.indexOf('scan-secrets') !== -1 && r.stdout.indexOf('repair-secrets') !== -1);
+    ok('help 输出全部命令', r.stdout.indexOf('scan-secrets') !== -1 && r.stdout.indexOf('snapshot') !== -1 && r.stdout.indexOf('test [id|名称]') !== -1);
 
     r = await run(['no-such-command'], url);
     ok('未知命令退出码 1', r.status === 1);
@@ -82,6 +82,28 @@ server.listen(0, '127.0.0.1', async () => {
 
     r = await run(['-j', 'search', 'related-provider'], url);
     ok('-j search 输出 JSON 数组', r.status === 0 && r.stdout.trim().startsWith('['));
+
+    // snapshot 创建与列表
+    r = await run(['snapshot'], url);
+    ok('snapshot 创建快照退出码 0', r.status === 0 && r.stdout.indexOf('快照已创建') !== -1);
+
+    r = await run(['snapshot', 'list'], url);
+    ok('snapshot list 输出列表退出码 0', r.status === 0 && r.stdout.indexOf('共') !== -1);
+
+    r = await run(['-j', 'snapshot', 'list'], url);
+    ok('-j snapshot list 输出 JSON 数组', r.status === 0 && r.stdout.trim().startsWith('['));
+
+    // test 端点与工具连通性探测
+    const localProv = store.create('providers', { name: 'local-test-provider', baseUrl: url });
+    r = await run(['test', localProv.id], url);
+    ok('test 对有效端点探活成功', r.status === 0 && r.stdout.indexOf('✓') !== -1);
+
+    const stdioMcp = store.create('mcpservers', { name: 'test-stdio-mcp', command: 'node' });
+    r = await run(['test', stdioMcp.id], url);
+    ok('test 对有效 MCP 工具校验成功', r.status === 0 && r.stdout.indexOf('✓') !== -1);
+
+    r = await run(['test', 'ghost-target-xyz'], url);
+    ok('test 找不到目标时退出码 1', r.status === 1 && r.stderr.indexOf('找不到可测试') !== -1);
 
     // 服务离线时的报错路径：指向一个不可能有服务的端口（且禁用自动拉起）
     r = await run(['status'], 'http://127.0.0.1:1');

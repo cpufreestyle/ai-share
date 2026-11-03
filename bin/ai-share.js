@@ -10,6 +10,8 @@
 //   ai-share plan <方案>                  预览将写入客户端的内容（不落盘）
 //   ai-share apply <方案>                 把方案写入客户端配置
 //   ai-share scan-secrets                扫描本地配置里的明文密钥
+//   ai-share test [id|名称] [--all]       测试端点或 MCP 工具连通性与延迟
+//   ai-share snapshot [list]             创建或查看本地安全快照
 //   ai-share trash                       查看回收站
 //   ai-share health [staleDays]          资源健康度报告（缺失/重复/陈旧/回收站积压）
 //   ai-share markdown [> out.md]         输出全部资源的 Markdown 索引
@@ -123,6 +125,8 @@ const HELP = [
   '  plan <方案>                   预览将写入客户端的内容（不落盘）',
   '  apply <方案>                  把方案写入客户端配置',
   '  scan-secrets                  扫描本地配置里的明文密钥',
+  '  test [id|名称] [--all]        测试端点 (Provider) 或工具 (MCP) 连通性',
+  '  snapshot [list]               创建或查看全库安全快照',
   '  trash                         查看回收站',
   '  repair-secrets [--apply]      密钥多层加密体检 / 修复',
   '  env <端点>                    输出该端点的 shell export 片段',
@@ -311,6 +315,116 @@ async function main() {
     const md = await res.text();
     process.stdout.write(md);
     if (process.stdout.isTTY) console.log(dim('\n# 提示：重定向保存，如  ai-share markdown > ai-index.md'));
+    return;
+  }
+
+  if (cmd === 'test') {
+    const all = rest.includes('--all') || (!rest.length);
+    const target = rest.find((a) => a !== '--all');
+    await ensureServer();
+
+    if (all && !target) {
+      const [providers, mcps] = await Promise.all([req('GET', '/api/providers'), req('GET', '/api/mcpservers')]);
+      const results = { providers: [], mcpservers: [] };
+      if (!JSON_MODE) console.log('● 端点 (Providers)');
+      for (const p of providers) {
+        let r;
+        try { r = await req('POST', '/api/providers/' + p.id + '/test'); } catch (e) { r = { ok: false, error: e.message }; }
+        results.providers.push({ id: p.id, name: p.name, result: r });
+        if (!JSON_MODE) {
+          const mark = r.ok ? '✓ ' : '✗ ';
+          const detail = r.ok ? ((r.status || 'OK') + ' (' + r.ms + 'ms)') : (r.error || '失败');
+          console.log('  ' + mark + pad(titleOf(p), 24) + pad(p.id, 16) + dim(detail));
+        }
+      }
+      if (!providers.length && !JSON_MODE) console.log(dim('  无端点'));
+
+      if (!JSON_MODE) console.log('\n● 工具 (MCP Servers)');
+      for (const m of mcps) {
+        let r;
+        try { r = await req('POST', '/api/mcpservers/' + m.id + '/check'); } catch (e) { r = { ok: false, error: e.message }; }
+        results.mcpservers.push({ id: m.id, name: m.name, result: r });
+        if (!JSON_MODE) {
+          const mark = r.ok ? '✓ ' : '✗ ';
+          let detail = '';
+          if (r.ok) {
+            detail = r.kind === 'stdio' ? (r.exists ? '命令就绪' : '命令待安装') : ('可达 (' + (r.ms ? r.ms + 'ms, ' : '') + 'HTTP ' + (r.status || 200) + ')');
+          } else {
+            detail = r.error || '不可达';
+          }
+          console.log('  ' + mark + pad(titleOf(m), 24) + pad(m.id, 16) + dim(detail));
+        }
+      }
+      if (!mcps.length && !JSON_MODE) console.log(dim('  无工具'));
+      if (JSON_MODE) return console.log(JSON.stringify(results, null, 2));
+      return;
+    }
+
+    if (!target) throw new Error('用法： ai-share test <id|名称> 或 ai-share test --all');
+
+    const providers = await req('GET', '/api/providers');
+    const tk = String(target).toLowerCase();
+    const pHit = providers.find((p) => p.id === target)
+      || providers.find((p) => p.name === target)
+      || (() => { const m = providers.filter((p) => (p.name || '').toLowerCase().includes(tk)); return m.length === 1 ? m[0] : null; })();
+
+    if (pHit) {
+      const r = await req('POST', '/api/providers/' + pHit.id + '/test');
+      if (JSON_MODE) return console.log(JSON.stringify({ target: pHit, result: r }, null, 2));
+      if (r.ok) {
+        console.log('✓ [Provider] ' + titleOf(pHit) + ' (' + pHit.id + ') · ' + (r.status || 'OK') + ' (' + r.ms + 'ms)');
+        if (r.url) console.log(dim('  端点：' + r.url));
+      } else {
+        console.log('✗ [Provider] ' + titleOf(pHit) + ' (' + pHit.id + ') · 失败：' + (r.error || '不可达'));
+      }
+      return;
+    }
+
+    const mcps = await req('GET', '/api/mcpservers');
+    const mHit = mcps.find((m) => m.id === target)
+      || mcps.find((m) => m.name === target)
+      || (() => { const m = mcps.filter((x) => (x.name || '').toLowerCase().includes(tk)); return m.length === 1 ? m[0] : null; })();
+
+    if (mHit) {
+      const r = await req('POST', '/api/mcpservers/' + mHit.id + '/check');
+      if (JSON_MODE) return console.log(JSON.stringify({ target: mHit, result: r }, null, 2));
+      if (r.ok) {
+        const detail = r.kind === 'stdio' ? (r.exists ? '命令就绪' : '命令待安装') : ('可达 (' + (r.ms ? r.ms + 'ms, ' : '') + 'HTTP ' + (r.status || 200) + ')');
+        console.log('✓ [MCP] ' + titleOf(mHit) + ' (' + mHit.id + ') · ' + detail);
+        if (r.command) console.log(dim('  命令：' + r.command));
+        if (r.url) console.log(dim('  URL：' + r.url));
+      } else {
+        console.log('✗ [MCP] ' + titleOf(mHit) + ' (' + mHit.id + ') · 失败：' + (r.error || '不可达'));
+      }
+      return;
+    }
+
+    throw new Error('找不到可测试的端点或 MCP 服务：' + target + '（可用 ai-share list providers 或 mcpservers 查看）');
+  }
+
+  if (cmd === 'snapshot') {
+    const sub = rest[0];
+    await ensureServer();
+    if (sub === 'list' || sub === '-l' || sub === '--list') {
+      const r = await req('GET', '/api/backup/snapshots');
+      const list = r.snapshots || [];
+      if (JSON_MODE) return console.log(JSON.stringify(list, null, 2));
+      if (!list.length) return console.log(dim('暂无快照'));
+      console.log(pad('快照名', 32) + pad('大小', 12) + pad('创建时间', 22) + dim('包含'));
+      for (const s of list) {
+        const sz = (s.size / 1024).toFixed(1) + ' KB';
+        const st = s.corrupt ? ' [损坏]' : '';
+        const timeStr = s.takenAt ? s.takenAt.replace('T', ' ').slice(0, 19) : '-';
+        console.log(pad(s.name, 32) + pad(sz, 12) + pad(timeStr, 22) + dim(s.count + ' 项' + st));
+      }
+      console.log(dim('共 ' + list.length + ' 份快照'));
+      return;
+    }
+    const r = await req('POST', '/api/backup/snapshot', {});
+    if (JSON_MODE) return console.log(JSON.stringify(r, null, 2));
+    const s = r.snapshot || {};
+    console.log('✓ 快照已创建：' + s.name + ' (' + (s.size / 1024).toFixed(1) + ' KB · ' + s.count + ' 项资源)');
+    if (r.dir) console.log(dim('  路径：' + r.dir));
     return;
   }
 
