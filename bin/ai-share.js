@@ -333,7 +333,7 @@ async function main() {
         results.providers.push({ id: p.id, name: p.name, result: r });
         if (!JSON_MODE) {
           const mark = r.ok ? '✓ ' : '✗ ';
-          const detail = r.ok ? ((r.status || 'OK') + ' (' + r.ms + 'ms)') : (r.error || '失败');
+          const detail = r.ok ? ((r.status || 'OK') + ' (' + r.ms + 'ms' + (r.modelCount != null ? ', ' + r.modelCount + ' models' : '') + ')') : (r.error || '失败');
           console.log('  ' + mark + pad(titleOf(p), 24) + pad(p.id, 16) + dim(detail));
         }
       }
@@ -348,7 +348,7 @@ async function main() {
           const mark = r.ok ? '✓ ' : '✗ ';
           let detail = '';
           if (r.ok) {
-            detail = r.kind === 'stdio' ? (r.exists ? '命令就绪' : '命令待安装') : ('可达 (' + (r.ms ? r.ms + 'ms, ' : '') + 'HTTP ' + (r.status || 200) + ')');
+            detail = r.kind === 'stdio' ? (r.exists ? '命令就绪' : '命令待安装') : ('可达 (' + (r.ms ? r.ms + 'ms, ' : '') + 'HTTP ' + (r.status || 200) + (r.serverInfo ? ', ' + (r.serverInfo.name || 'mcp') + (r.serverInfo.version ? ' v' + r.serverInfo.version : '') : '') + ')');
           } else {
             detail = r.error || '不可达';
           }
@@ -372,7 +372,7 @@ async function main() {
       const r = await req('POST', '/api/providers/' + pHit.id + '/test');
       if (JSON_MODE) return console.log(JSON.stringify({ target: pHit, result: r }, null, 2));
       if (r.ok) {
-        console.log('✓ [Provider] ' + titleOf(pHit) + ' (' + pHit.id + ') · ' + (r.status || 'OK') + ' (' + r.ms + 'ms)');
+        console.log('✓ [Provider] ' + titleOf(pHit) + ' (' + pHit.id + ') · ' + (r.status || 'OK') + ' (' + r.ms + 'ms)' + (r.modelCount != null ? ' · ' + r.modelCount + ' models' : ''));
         if (r.url) console.log(dim('  端点：' + r.url));
       } else {
         console.log('✗ [Provider] ' + titleOf(pHit) + ' (' + pHit.id + ') · 失败：' + (r.error || '不可达'));
@@ -389,7 +389,7 @@ async function main() {
       const r = await req('POST', '/api/mcpservers/' + mHit.id + '/check');
       if (JSON_MODE) return console.log(JSON.stringify({ target: mHit, result: r }, null, 2));
       if (r.ok) {
-        const detail = r.kind === 'stdio' ? (r.exists ? '命令就绪' : '命令待安装') : ('可达 (' + (r.ms ? r.ms + 'ms, ' : '') + 'HTTP ' + (r.status || 200) + ')');
+        const detail = r.kind === 'stdio' ? (r.exists ? '命令就绪' : '命令待安装') : ('可达 (' + (r.ms ? r.ms + 'ms, ' : '') + 'HTTP ' + (r.status || 200) + (r.serverInfo ? ', ' + (r.serverInfo.name || 'mcp') + (r.serverInfo.version ? ' v' + r.serverInfo.version : '') : '') + ')');
         console.log('✓ [MCP] ' + titleOf(mHit) + ' (' + mHit.id + ') · ' + detail);
         if (r.command) console.log(dim('  命令：' + r.command));
         if (r.url) console.log(dim('  URL：' + r.url));
