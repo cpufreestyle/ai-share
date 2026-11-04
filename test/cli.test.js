@@ -42,7 +42,7 @@ server.listen(0, '127.0.0.1', async () => {
   try {
     let r = await run(['help'], url);
     ok('help 退出码 0', r.status === 0);
-    ok('help 输出全部命令', r.stdout.indexOf('scan-secrets') !== -1 && r.stdout.indexOf('snapshot') !== -1 && r.stdout.indexOf('test [id|名称]') !== -1);
+    ok('help 输出全部命令', r.stdout.indexOf('scan-secrets') !== -1 && r.stdout.indexOf('snapshot') !== -1 && r.stdout.indexOf('test [id|名称]') !== -1 && r.stdout.indexOf('clients') !== -1);
 
     r = await run(['no-such-command'], url);
     ok('未知命令退出码 1', r.status === 1);
@@ -104,6 +104,19 @@ server.listen(0, '127.0.0.1', async () => {
 
     r = await run(['test', 'ghost-target-xyz'], url);
     ok('test 找不到目标时退出码 1', r.status === 1 && r.stderr.indexOf('找不到可测试') !== -1);
+
+    // clients 客户端检测与一键纳管
+    r = await run(['clients'], url);
+    ok('clients 探测与列表输出退出码 0', r.status === 0 && r.stdout.indexOf('客户端') !== -1);
+
+    r = await run(['-j', 'clients'], url);
+    ok('-j clients 输出 JSON 数组', r.status === 0 && r.stdout.trim().startsWith('['));
+
+    r = await run(['clients', 'enroll', 'all'], url);
+    ok('clients enroll all 退出码 0', r.status === 0);
+
+    r = await run(['clients', 'enroll', 'ghost-client-xyz'], url);
+    ok('clients enroll 未知类型退出码 1', r.status === 1 && r.stderr.indexOf('未知客户端类型') !== -1);
 
     // 服务离线时的报错路径：指向一个不可能有服务的端口（且禁用自动拉起）
     r = await run(['status'], 'http://127.0.0.1:1');

@@ -12,6 +12,7 @@
 //   ai-share scan-secrets                扫描本地配置里的明文密钥
 //   ai-share test [id|名称] [--all]       测试端点或 MCP 工具连通性与延迟
 //   ai-share snapshot [list]             创建或查看本地安全快照
+//   ai-share clients [detect|enroll]     检测本机 AI 客户端或一键纳管
 //   ai-share trash                       查看回收站
 //   ai-share health [staleDays]          资源健康度报告（缺失/重复/陈旧/回收站积压）
 //   ai-share markdown [> out.md]         输出全部资源的 Markdown 索引
@@ -127,6 +128,7 @@ const HELP = [
   '  scan-secrets                  扫描本地配置里的明文密钥',
   '  test [id|名称] [--all]        测试端点 (Provider) 或工具 (MCP) 连通性',
   '  snapshot [list]               创建或查看全库安全快照',
+  '  clients [detect|enroll <type|all>] 查看本地客户端安装/纳管状态或一键纳管',
   '  trash                         查看回收站',
   '  repair-secrets [--apply]      密钥多层加密体检 / 修复',
   '  env <端点>                    输出该端点的 shell export 片段',
@@ -425,6 +427,100 @@ async function main() {
     const s = r.snapshot || {};
     console.log('✓ 快照已创建：' + s.name + ' (' + (s.size / 1024).toFixed(1) + ' KB · ' + s.count + ' 项资源)');
     if (r.dir) console.log(dim('  路径：' + r.dir));
+    return;
+  }
+
+  if (cmd === 'clients') {
+    const sub = rest[0];
+    await ensureServer();
+
+    // 1. 纳管单个客户端或所有已检测客户端： ai-share clients enroll [type|all]
+    if (sub === 'enroll' || sub === 'add' || sub === 'import') {
+      const target = (rest[1] || 'all').toLowerCase();
+      const [detected, enrolled] = await Promise.all([
+        req('GET', '/api/detect/clients'),
+        req('GET', '/api/clients'),
+      ]);
+
+      const toEnroll = target === 'all'
+        ? detected.filter((d) => (d.installed || d.exists) && !enrolled.some((c) => c.type === d.type))
+        : detected.filter((d) => d.type.toLowerCase() === target || d.name.toLowerCase() === target);
+
+      if (!toEnroll.length) {
+        if (target === 'all') {
+          if (JSON_MODE) return console.log(JSON.stringify({ ok: true, added: [] }));
+          return console.log(dim('未发现待纳管的新客户端（已安装客户端均已纳管，或尚未检测到新客户端安装）'));
+        }
+        const hit = detected.find((d) => d.type.toLowerCase() === target || d.name.toLowerCase() === target);
+        if (!hit) throw new Error('未知客户端类型：' + target + '（支持：' + detected.map((d) => d.type).join(' / ') + '）');
+        const already = enrolled.find((c) => c.type === hit.type);
+        if (already) {
+          if (JSON_MODE) return console.log(JSON.stringify({ ok: true, alreadyEnrolled: already }));
+          return console.log(dim('客户端已在纳管列表中：' + hit.name + ' (' + already.id + ')'));
+        }
+      }
+
+      const added = [];
+      for (const d of toEnroll) {
+        const id = 'c_' + d.type;
+        const exists = enrolled.find((c) => c.id === id || c.type === d.type);
+        if (exists) continue;
+        const record = {
+          id,
+          name: d.name,
+          type: d.type,
+          enabled: true,
+          configPath: d.configPath,
+          description: d.name + ' 客户端（自动纳管）',
+        };
+        await req('POST', '/api/clients', record);
+        added.push(record);
+        if (!JSON_MODE) {
+          console.log('✓ 已纳管 ' + pad(d.name, 16) + pad(id, 14) + dim(d.configPath));
+        }
+      }
+
+      if (JSON_MODE) return console.log(JSON.stringify({ ok: true, added }, null, 2));
+      if (!added.length && !JSON_MODE) console.log(dim('没有需要新纳管的客户端'));
+      return;
+    }
+
+    // 2. 默认：探测并列出全部支持客户端的安装与纳管状态
+    const [detected, enrolled] = await Promise.all([
+      req('GET', '/api/detect/clients'),
+      req('GET', '/api/clients'),
+    ]);
+
+    const list = detected.map((d) => {
+      const match = enrolled.find((c) => c.type === d.type || (c.name && c.name.toLowerCase() === d.name.toLowerCase()));
+      return {
+        type: d.type,
+        name: d.name,
+        installed: d.installed,
+        exists: d.exists,
+        configPath: d.configPath,
+        resolved: d.resolved,
+        enrolled: !!match,
+        clientId: match ? match.id : null,
+        enabled: match ? match.enabled : null,
+      };
+    });
+
+    if (JSON_MODE) return console.log(JSON.stringify(list, null, 2));
+
+    console.log(pad('客户端', 18) + pad('类型', 12) + pad('安装状态', 14) + pad('纳管状态', 18) + dim('配置文件'));
+    for (const c of list) {
+      let inst = c.installed ? '已安装' : (c.exists ? '有配置' : dim('未检测到'));
+      let enr = c.enrolled
+        ? ('✓ 已纳管 (' + (c.enabled ? '启用' : '停用') + ')')
+        : (c.installed ? '未纳管 (可纳管)' : dim('未纳管'));
+      const mark = c.enrolled ? '✓ ' : (c.installed ? '● ' : '  ');
+      console.log(mark + pad(c.name, 16) + pad(c.type, 12) + pad(inst, 14) + pad(enr, 18) + dim(c.configPath));
+    }
+    const unmanagedInstalled = list.filter((c) => c.installed && !c.enrolled);
+    if (unmanagedInstalled.length) {
+      console.log(dim('\n提示：有 ' + unmanagedInstalled.length + ' 个已安装客户端尚未纳管，可执行  ai-share clients enroll <type|all>  一键登记。'));
+    }
     return;
   }
 
